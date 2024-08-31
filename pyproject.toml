@@ -47,3 +47,9 @@ disable = [
     "too-many-locals",
     "too-few-public-methods",
 ]
+
+[tool.pytest.ini_options]
+testpaths = "tests"
+addopts = [
+    "--import-mode=importlib",
+]

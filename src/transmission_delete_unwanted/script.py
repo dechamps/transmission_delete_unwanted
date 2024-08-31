@@ -2,7 +2,7 @@ import argparse
 import transmission_rpc
 
 
-def _parse_arguments():
+def _parse_arguments(args=None):
     argument_parser = argparse.ArgumentParser(
         description="Deletes unwanted files from a Transmission torrent.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -22,10 +22,10 @@ def _parse_arguments():
         required=True,
         default=argparse.SUPPRESS,
     )
-    return argument_parser.parse_args()
+    return argument_parser.parse_args(args)
 
 
-def main():
-    args = _parse_arguments()
+def main(args=None):
+    args = _parse_arguments(args)
     with transmission_rpc.from_url(args.transmission_url) as transmission_client:
         print(transmission_client.get_torrent(args.torrent_id).fields)
