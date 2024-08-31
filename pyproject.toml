@@ -1,0 +1,49 @@
+[project]
+name = "transmission_delete_unwanted"
+authors = [{name = "Etienne Dechamps", email = "etienne@edechamps.fr"}]
+description = "Delete unwanted files in a Transmission torrent"
+classifiers = [
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+]
+dynamic = ["dependencies", "version"]
+
+[build-system]
+requires = [
+    "packaging==24.1",
+    "setuptools==74.0.0",
+    "setuptools-scm==8.1.0",
+    "typing_extensions==4.12.2",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+# Use pinned dependencies for the package itself as the package is intended to be used
+# as an application in a dedicated venv. This ensures users end up running the package
+# with the exact same set of dependencies the code was developed and tested with.
+dependencies = {file = ["requirements.txt"]}
+
+[project.scripts]
+transmission-delete-unwanted = "transmission_delete_unwanted.script:main"
+
+[tool.pip-tools]
+# We could use generate-hashes here, but sadly we can't, because that would make the
+# resulting requirements.txt non-compliant with PEP 508, making it unusable for use in
+# dynamic `dependencies`. See also:
+#  https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
+strip-extras = true
+
+[tool.black]
+unstable = true  # For long string line breaks
+
+[tool.pylint.main]
+disable = [
+    "duplicate-code",
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "fixme",
+    "too-many-arguments",
+    "too-many-locals",
+    "too-few-public-methods",
+]

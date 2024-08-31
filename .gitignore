@@ -1,0 +1,4 @@
+/src/transmission_delete_unwanted.egg-info/
+/src/**/__pycache__/
+/build/
+/dist/
