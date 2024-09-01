@@ -1,7 +1,9 @@
+import base64
 import contextlib
 import collections
 import enum
 import socket
+import struct
 import subprocess
 import pathlib
 import uuid
@@ -77,6 +79,17 @@ def _fixture_transmission_client(transmission_url):
 Torrent = collections.namedtuple("Torrent", ["path", "torf", "transmission"])
 
 
+def _to_pieces_array(transmission_torrent):
+    pieces_bitfield = base64.b64decode(transmission_torrent.pieces)
+    piece_count = transmission_torrent.piece_count
+    assert len(pieces_bitfield) == -(-piece_count // 8)
+    return [
+        byte & (1 << (bitpos - 1)) != 0
+        for bitpos in range(8, 0, -1)
+        for byte in pieces_bitfield
+    ][: transmission_torrent.piece_count]
+
+
 @pytest.fixture(name="setup_torrent")
 def _fixture_setup_torrent(transmission_client):
     download_dir = transmission_client.get_session().download_dir
@@ -110,11 +123,14 @@ def _fixture_setup_torrent(transmission_client):
             "percentComplete",
             "percentDone",
             "leftUntilDone",
+            "pieceCount",
+            "pieces",
         ])
         assert transmission_info.status == transmission_rpc.Status.SEEDING
         assert transmission_info.percent_complete == 1
         assert transmission_info.percent_done == 1
         assert transmission_info.left_until_done == 0
+        assert all(_to_pieces_array(transmission_info))
 
         return Torrent(
             path=path,
