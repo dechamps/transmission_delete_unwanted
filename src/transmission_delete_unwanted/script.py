@@ -28,4 +28,9 @@ def _parse_arguments(args=None):
 def main(args=None):
     args = _parse_arguments(args)
     with transmission_rpc.from_url(args.transmission_url) as transmission_client:
-        print(transmission_client.get_torrent(args.torrent_id).fields)
+        torrent_id = args.torrent_id
+        print(
+            transmission_client.get_torrent(
+                torrent_id if len(torrent_id) == 40 else int(torrent_id)
+            ).fields
+        )
