@@ -204,8 +204,8 @@ def test_noop_multifile_multipiece_aligned(
     torrent = setup_torrent(
         files={
             "test0.txt": b"0" * _MIN_PIECE_SIZE,
-            "test1.txt": b"0" * _MIN_PIECE_SIZE,
-            "test2.txt": b"0" * _MIN_PIECE_SIZE,
+            "test1.txt": b"1" * _MIN_PIECE_SIZE,
+            "test2.txt": b"2" * _MIN_PIECE_SIZE,
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -219,9 +219,9 @@ def test_noop_multifile_multipiece_unaligned(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": b"0" * (_MIN_PIECE_SIZE + 1),
-            "test1.txt": b"0" * _MIN_PIECE_SIZE,
-            "test2.txt": b"0" * _MIN_PIECE_SIZE,
+            "test0.txt": b"x" * (_MIN_PIECE_SIZE + 1),
+            "test1.txt": b"x" * _MIN_PIECE_SIZE,
+            "test2.txt": b"x" * _MIN_PIECE_SIZE,
         },
         piece_size=_MIN_PIECE_SIZE,
     )
