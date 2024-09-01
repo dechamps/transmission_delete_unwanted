@@ -81,12 +81,24 @@ def _fixture_setup_torrent(transmission_client):
         path.mkdir()
         with open(path / "test.txt", "w", encoding="utf-8") as file:
             file.write("test")
-        torrent = torf.Torrent(path=path, private=True)
-        torrent.generate()
+        torf_torrent = torf.Torrent(path=path, private=True)
+        torf_torrent.generate()
+        transmission_torrent = transmission_client.add_torrent(torf_torrent.dump())
+
+        transmission_info = transmission_client.get_torrent(
+            transmission_torrent.id,
+            arguments=[
+                "hashString",
+                "wanted",
+            ],
+        )
+        assert transmission_info.info_hash == torf_torrent.infohash
+        assert all(transmission_info.wanted)
+
         return Torrent(
             path=path,
-            torf=torrent,
-            transmission=transmission_client.add_torrent(torrent.dump()),
+            torf=torf_torrent,
+            transmission=transmission_torrent,
         )
 
     return _create_torrent
