@@ -1,4 +1,3 @@
-import base64
 import contextlib
 import collections
 import enum
@@ -11,6 +10,7 @@ import pytest
 import torf
 import transmission_rpc
 import transmission_delete_unwanted.script
+import transmission_delete_unwanted.pieces
 
 
 # TODO: this is ugly, racy and insecure. Ideally we should use an Unix socket for
@@ -78,17 +78,6 @@ def _fixture_transmission_client(transmission_url):
 Torrent = collections.namedtuple("Torrent", ["path", "torf", "transmission"])
 
 
-def _to_pieces_array(transmission_torrent):
-    pieces_bitfield = base64.b64decode(transmission_torrent.pieces)
-    piece_count = transmission_torrent.piece_count
-    assert len(pieces_bitfield) == -(-piece_count // 8)
-    return [
-        byte & (1 << (bitpos - 1)) != 0
-        for bitpos in range(8, 0, -1)
-        for byte in pieces_bitfield
-    ][: transmission_torrent.piece_count]
-
-
 _MIN_PIECE_SIZE = 16384  # BEP-0052
 
 
@@ -133,7 +122,7 @@ def _fixture_setup_torrent(transmission_client):
         assert transmission_info.percent_complete == 1
         assert transmission_info.percent_done == 1
         assert transmission_info.left_until_done == 0
-        assert all(_to_pieces_array(transmission_info))
+        assert all(transmission_delete_unwanted.pieces.to_array(transmission_info))
 
         return Torrent(
             path=path,
