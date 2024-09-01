@@ -60,7 +60,6 @@ def main(args=None):
                 # is wanted if it overlaps with any wanted file.
                 wanted_pieces[piece_index] = wanted_pieces[piece_index] or file_wanted
             current_offset += file_length
-        print(wanted_pieces)
         assert all(wanted_piece is not None for wanted_piece in wanted_pieces)
 
         # Actual functionality not implemented yet; for now, just fail if anything needs
