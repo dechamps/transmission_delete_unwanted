@@ -3,6 +3,10 @@ import pytest
 from transmission_delete_unwanted import pieces
 
 
+def test_to_array_empty():
+    assert pieces.to_array(base64.b64encode(bytes([])), 0) == []
+
+
 def test_to_array_zero():
     assert pieces.to_array(base64.b64encode(bytes([0b00000000])), 1) == [False]
 
