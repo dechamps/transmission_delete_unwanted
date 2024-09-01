@@ -65,4 +65,4 @@ def main(args=None):
 
         # Actual functionality not implemented yet; for now, just fail if anything needs
         # to be done
-        assert wanted_pieces == pieces.to_array(torrent)
+        assert wanted_pieces == pieces.to_array(torrent.pieces, torrent.piece_count)

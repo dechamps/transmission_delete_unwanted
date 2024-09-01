@@ -122,7 +122,11 @@ def _fixture_setup_torrent(transmission_client):
         assert transmission_info.percent_complete == 1
         assert transmission_info.percent_done == 1
         assert transmission_info.left_until_done == 0
-        assert all(transmission_delete_unwanted.pieces.to_array(transmission_info))
+        assert all(
+            transmission_delete_unwanted.pieces.to_array(
+                transmission_info.pieces, transmission_info.piece_count
+            )
+        )
 
         return Torrent(
             path=path,
