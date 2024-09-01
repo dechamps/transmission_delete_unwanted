@@ -1,4 +1,5 @@
 import base64
+import pytest
 from transmission_delete_unwanted import pieces
 
 
@@ -55,3 +56,13 @@ def test_to_array_multibyte():
         True,
         False,
     ]
+
+
+def test_to_array_too_short():
+    with pytest.raises(ValueError):
+        pieces.to_array(base64.b64encode(bytes([0])), 9)
+
+
+def test_to_array_too_long():
+    with pytest.raises(ValueError):
+        pieces.to_array(base64.b64encode(bytes([0, 0])), 8)
