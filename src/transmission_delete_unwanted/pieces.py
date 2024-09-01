@@ -8,8 +8,11 @@ def to_array(pieces_b64bitfield, piece_count):
             f"Length of pieces bitfield ({len(pieces_b64bitfield)}) is not consistent"
             f" with piece count ({piece_count})"
         )
-    return [
+    pieces = [
         byte & (1 << (bitpos - 1)) != 0
         for byte in pieces_bitfield
         for bitpos in range(8, 0, -1)
-    ][:piece_count]
+    ]
+    if any(pieces[piece_count:]):
+        raise ValueError("Pieces bitfield contains spurious trailing set bits")
+    return pieces[:piece_count]

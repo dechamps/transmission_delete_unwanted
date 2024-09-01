@@ -66,3 +66,8 @@ def test_to_array_too_short():
 def test_to_array_too_long():
     with pytest.raises(ValueError):
         pieces.to_array(base64.b64encode(bytes([0, 0])), 8)
+
+
+def test_to_array_spurious_bits():
+    with pytest.raises(ValueError):
+        pieces.to_array(base64.b64encode(bytes([0b00001000])), 4)
