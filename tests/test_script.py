@@ -1,4 +1,5 @@
 import contextlib
+import collections
 import socket
 import subprocess
 import pathlib
@@ -67,6 +68,9 @@ def _fixture_transmission_client(transmission_url):
         yield transmission_client
 
 
+Torrent = collections.namedtuple("Torrent", ["path", "torf", "transmission"])
+
+
 @pytest.fixture(name="setup_torrent")
 def _fixture_setup_torrent(transmission_client):
     download_dir = transmission_client.get_session().download_dir
@@ -78,15 +82,21 @@ def _fixture_setup_torrent(transmission_client):
             file.write("test")
         torrent = torf.Torrent(path=path, private=True)
         torrent.generate()
-        return transmission_client.add_torrent(torrent.dump())
+        return Torrent(
+            path=path,
+            torf=torrent,
+            transmission=transmission_client.add_torrent(torrent.dump()),
+        )
 
     return _create_torrent
 
 
-def test_torrent(transmission_url, setup_torrent):
+def test_noop(transmission_url, setup_torrent):
+    torrent = setup_torrent()
     transmission_delete_unwanted.script.main([
         "--transmission-url",
         transmission_url,
         "--torrent-id",
-        str(setup_torrent().id),
+        str(torrent.transmission.id),
     ])
+    torrent.torf.verify(path=torrent.path)
