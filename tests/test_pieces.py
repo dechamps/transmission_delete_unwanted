@@ -34,3 +34,24 @@ def test_to_array_zeroone():
         False,
         True,
     ]
+
+
+def test_to_array_multibyte():
+    assert pieces.to_array(base64.b64encode(bytes([0b10000001, 0b01111110])), 16) == [
+        True,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        True,
+        False,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        False,
+    ]
