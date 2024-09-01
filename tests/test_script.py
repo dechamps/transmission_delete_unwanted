@@ -91,12 +91,14 @@ def _fixture_setup_torrent(transmission_client):
     return _create_torrent
 
 
-def test_noop(transmission_url, setup_torrent):
+@pytest.fixture(name="transmission_delete_unwanted")
+def _fixture_transmission_delete_unwanted(transmission_url):
+    return lambda *kargs: transmission_delete_unwanted.script.main(
+        ["--transmission-url", transmission_url] + list(kargs)
+    )
+
+
+def test_noop(transmission_delete_unwanted, setup_torrent):
     torrent = setup_torrent()
-    transmission_delete_unwanted.script.main([
-        "--transmission-url",
-        transmission_url,
-        "--torrent-id",
-        str(torrent.transmission.id),
-    ])
+    transmission_delete_unwanted("--torrent-id", str(torrent.transmission.id))
     torrent.torf.verify(path=torrent.path)
