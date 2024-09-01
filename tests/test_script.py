@@ -3,7 +3,6 @@ import contextlib
 import collections
 import enum
 import socket
-import struct
 import subprocess
 import pathlib
 import uuid
