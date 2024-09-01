@@ -6,6 +6,8 @@
 #
 backoff==2.2.1
     # via -r dev-requirements.in
+flatbencode==0.2.1
+    # via torf
 iniconfig==2.0.0
     # via pytest
 packaging==24.1
@@ -13,4 +15,6 @@ packaging==24.1
 pluggy==1.5.0
     # via pytest
 pytest==8.3.2
+    # via -r dev-requirements.in
+torf==4.2.7
     # via -r dev-requirements.in

@@ -1,8 +1,12 @@
-from contextlib import closing
+import contextlib
 import socket
 import subprocess
+import pathlib
+import uuid
 import backoff
 import pytest
+import torf
+import transmission_rpc
 import transmission_delete_unwanted.script
 
 
@@ -11,7 +15,7 @@ import transmission_delete_unwanted.script
 #
 # Shamelessly stolen from https://stackoverflow.com/a/45690594
 def find_free_port():
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+    with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
 
@@ -25,42 +29,64 @@ def _try_connect(address):
 
 @pytest.fixture(name="transmission_url")
 def _fixture_transmission_daemon(tmp_path):
-    transmission_address = "127.0.0.1"
-    transmission_config_dir = tmp_path / "transmission_config"
-    transmission_config_dir.mkdir()
-    transmission_download_dir = tmp_path / "transmission_download"
-    transmission_download_dir.mkdir()
+    address = "127.0.0.1"
+    config_dir = tmp_path / "transmission_config"
+    config_dir.mkdir()
+    download_dir = tmp_path / "transmission_download"
+    download_dir.mkdir()
     rpc_port = find_free_port()
-    transmission_daemon_process = subprocess.Popen([
+    daemon_process = subprocess.Popen([
         "transmission-daemon",
         "--foreground",
         "--config-dir",
-        str(transmission_config_dir),
+        str(config_dir),
         "--rpc-bind-address",
-        transmission_address,
+        address,
         "--port",
         str(rpc_port),
         "--peerport",
         str(find_free_port()),
         "--download-dir",
-        str(transmission_download_dir),
+        str(download_dir),
         "--log-level=debug",
     ])
     try:
-        _try_connect((transmission_address, rpc_port))
-        yield f"http://{transmission_address}:{rpc_port}"
+        _try_connect((address, rpc_port))
+        yield f"http://{address}:{rpc_port}"
     finally:
         # It would be cleaner to ask Transmission to shut itself down, but sadly
         # transmission_rpc does not support the relevant RPC command:
         #   https://github.com/trim21/transmission-rpc/issues/483
-        transmission_daemon_process.terminate()
-        transmission_daemon_process.wait()
+        daemon_process.terminate()
+        daemon_process.wait()
 
 
-def test_connect(transmission_url):
+@pytest.fixture(name="transmission_client")
+def _fixture_transmission_client(transmission_url):
+    with transmission_rpc.from_url(transmission_url) as transmission_client:
+        yield transmission_client
+
+
+@pytest.fixture(name="setup_torrent")
+def _fixture_setup_torrent(transmission_client):
+    download_dir = transmission_client.get_session().download_dir
+
+    def _create_torrent():
+        path = pathlib.Path(download_dir) / f"test_torrent_{uuid.uuid4()}"
+        path.mkdir()
+        with open(path / "test.txt", "w", encoding="utf-8") as file:
+            file.write("test")
+        torrent = torf.Torrent(path=path, private=True)
+        torrent.generate()
+        return transmission_client.add_torrent(torrent.dump())
+
+    return _create_torrent
+
+
+def test_torrent(transmission_url, setup_torrent):
     transmission_delete_unwanted.script.main([
         "--transmission-url",
         transmission_url,
         "--torrent-id",
-        "295184e2e91c10c2b1c35c2890a8394ff53d3be7",
+        str(setup_torrent().id),
     ])
