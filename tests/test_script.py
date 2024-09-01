@@ -175,7 +175,7 @@ def test_noop_onefile_onepiece(transmission_delete_unwanted_torrent, setup_torre
     torrent = setup_torrent(files={"test.txt": b"0000"}, piece_size=_MIN_PIECE_SIZE)
     assert torrent.torf.pieces == 1
     transmission_delete_unwanted_torrent(torrent)
-    torrent.torf.verify(path=torrent.path)
+    assert torrent.torf.verify(path=torrent.path)
 
 
 def test_noop_multifile_onepiece(transmission_delete_unwanted_torrent, setup_torrent):
@@ -185,7 +185,7 @@ def test_noop_multifile_onepiece(transmission_delete_unwanted_torrent, setup_tor
     )
     assert torrent.torf.pieces == 1
     transmission_delete_unwanted_torrent(torrent)
-    torrent.torf.verify(path=torrent.path)
+    assert torrent.torf.verify(path=torrent.path)
 
 
 def test_noop_onefile_multipiece(transmission_delete_unwanted_torrent, setup_torrent):
@@ -195,7 +195,7 @@ def test_noop_onefile_multipiece(transmission_delete_unwanted_torrent, setup_tor
     )
     assert torrent.torf.pieces == 4
     transmission_delete_unwanted_torrent(torrent)
-    torrent.torf.verify(path=torrent.path)
+    assert torrent.torf.verify(path=torrent.path)
 
 
 def test_noop_multifile_multipiece_aligned(
@@ -211,7 +211,7 @@ def test_noop_multifile_multipiece_aligned(
     )
     assert torrent.torf.pieces == 3
     transmission_delete_unwanted_torrent(torrent)
-    torrent.torf.verify(path=torrent.path)
+    assert torrent.torf.verify(path=torrent.path)
 
 
 def test_noop_multifile_multipiece_unaligned(
@@ -227,4 +227,4 @@ def test_noop_multifile_multipiece_unaligned(
     )
     assert torrent.torf.pieces == 4
     transmission_delete_unwanted_torrent(torrent)
-    torrent.torf.verify(path=torrent.path)
+    assert torrent.torf.verify(path=torrent.path)
