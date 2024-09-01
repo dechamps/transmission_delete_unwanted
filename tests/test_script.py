@@ -1,5 +1,6 @@
 import contextlib
 import collections
+import enum
 import socket
 import subprocess
 import pathlib
@@ -98,7 +99,26 @@ def _fixture_transmission_delete_unwanted(transmission_url):
     )
 
 
-def test_noop(transmission_delete_unwanted, setup_torrent):
+_TorrentIdKind = enum.Enum("TorrentIdKind", ["TRANSMISSION_ID", "HASH"])
+
+
+@pytest.fixture(
+    name="transmission_delete_unwanted_torrent",
+    params=[_TorrentIdKind.TRANSMISSION_ID, _TorrentIdKind.HASH],
+)
+def _fixture_transmission_delete_unwanted_torrent(
+    request, transmission_delete_unwanted
+):
+    return lambda torrent, *kargs: transmission_delete_unwanted(
+        "--torrent-id",
+        {
+            _TorrentIdKind.TRANSMISSION_ID: str(torrent.transmission.id),
+            _TorrentIdKind.HASH: torrent.torf.infohash,
+        }[request.param],
+    )
+
+
+def test_noop(transmission_delete_unwanted_torrent, setup_torrent):
     torrent = setup_torrent()
-    transmission_delete_unwanted("--torrent-id", str(torrent.transmission.id))
+    transmission_delete_unwanted_torrent(torrent)
     torrent.torf.verify(path=torrent.path)
