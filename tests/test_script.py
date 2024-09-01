@@ -90,16 +90,20 @@ def _to_pieces_array(transmission_torrent):
     ][: transmission_torrent.piece_count]
 
 
+_MIN_PIECE_SIZE = 16384  # BEP-0052
+
+
 @pytest.fixture(name="setup_torrent")
 def _fixture_setup_torrent(transmission_client):
     download_dir = transmission_client.get_session().download_dir
 
-    def _create_torrent():
+    def create_torrent(files, piece_size):
         path = pathlib.Path(download_dir) / f"test_torrent_{uuid.uuid4()}"
         path.mkdir()
-        with open(path / "test.txt", "w", encoding="utf-8") as file:
-            file.write("test")
-        torf_torrent = torf.Torrent(path=path, private=True)
+        for file_name, file_contents in files.items():
+            with open(path / file_name, "wb") as file:
+                file.write(file_contents)
+        torf_torrent = torf.Torrent(path=path, piece_size=piece_size, private=True)
         torf_torrent.generate()
         transmission_torrent = transmission_client.add_torrent(torf_torrent.dump())
 
@@ -138,7 +142,7 @@ def _fixture_setup_torrent(transmission_client):
             transmission=transmission_torrent,
         )
 
-    return _create_torrent
+    return create_torrent
 
 
 @pytest.fixture(name="transmission_delete_unwanted")
@@ -167,7 +171,60 @@ def _fixture_transmission_delete_unwanted_torrent(
     )
 
 
-def test_noop(transmission_delete_unwanted_torrent, setup_torrent):
-    torrent = setup_torrent()
+def test_noop_onefile_onepiece(transmission_delete_unwanted_torrent, setup_torrent):
+    torrent = setup_torrent(files={"test.txt": b"0000"}, piece_size=_MIN_PIECE_SIZE)
+    assert torrent.torf.pieces == 1
+    transmission_delete_unwanted_torrent(torrent)
+    torrent.torf.verify(path=torrent.path)
+
+
+def test_noop_multifile_onepiece(transmission_delete_unwanted_torrent, setup_torrent):
+    torrent = setup_torrent(
+        files={"test0.txt": b"0000", "test1.txt": b"0000", "test3.txt": b"0000"},
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 1
+    transmission_delete_unwanted_torrent(torrent)
+    torrent.torf.verify(path=torrent.path)
+
+
+def test_noop_onefile_multipiece(transmission_delete_unwanted_torrent, setup_torrent):
+    torrent = setup_torrent(
+        files={"test.txt": b"x" * _MIN_PIECE_SIZE * 4},
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 4
+    transmission_delete_unwanted_torrent(torrent)
+    torrent.torf.verify(path=torrent.path)
+
+
+def test_noop_multifile_multipiece_aligned(
+    transmission_delete_unwanted_torrent, setup_torrent
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": b"0" * _MIN_PIECE_SIZE,
+            "test1.txt": b"0" * _MIN_PIECE_SIZE,
+            "test2.txt": b"0" * _MIN_PIECE_SIZE,
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 3
+    transmission_delete_unwanted_torrent(torrent)
+    torrent.torf.verify(path=torrent.path)
+
+
+def test_noop_multifile_multipiece_unaligned(
+    transmission_delete_unwanted_torrent, setup_torrent
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": b"0" * (_MIN_PIECE_SIZE + 1),
+            "test1.txt": b"0" * _MIN_PIECE_SIZE,
+            "test2.txt": b"0" * _MIN_PIECE_SIZE,
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 4
     transmission_delete_unwanted_torrent(torrent)
     torrent.torf.verify(path=torrent.path)
