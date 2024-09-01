@@ -29,6 +29,11 @@ def _try_connect(address):
     socket.create_connection(address).close()
 
 
+@backoff.on_predicate(backoff.expo, factor=0.05, max_time=30, jitter=None)
+def _poll_until(predicate):
+    return predicate()
+
+
 @pytest.fixture(name="transmission_url")
 def _fixture_transmission_daemon(tmp_path):
     address = "127.0.0.1"
@@ -85,15 +90,31 @@ def _fixture_setup_torrent(transmission_client):
         torf_torrent.generate()
         transmission_torrent = transmission_client.add_torrent(torf_torrent.dump())
 
-        transmission_info = transmission_client.get_torrent(
-            transmission_torrent.id,
-            arguments=[
-                "hashString",
-                "wanted",
-            ],
-        )
+        def get_torrent(arguments):
+            return transmission_client.get_torrent(
+                transmission_torrent.id, arguments=arguments
+            )
+
+        transmission_info = get_torrent([
+            "hashString",
+            "wanted",
+        ])
         assert transmission_info.info_hash == torf_torrent.infohash
         assert all(transmission_info.wanted)
+
+        _poll_until(
+            lambda: get_torrent(["status"]).status != transmission_rpc.Status.CHECKING
+        )
+        transmission_info = get_torrent([
+            "status",
+            "percentComplete",
+            "percentDone",
+            "leftUntilDone",
+        ])
+        assert transmission_info.status == transmission_rpc.Status.SEEDING
+        assert transmission_info.percent_complete == 1
+        assert transmission_info.percent_done == 1
+        assert transmission_info.left_until_done == 0
 
         return Torrent(
             path=path,
