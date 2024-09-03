@@ -116,7 +116,6 @@ def _fixture_assert_torrent_status(transmission_client):
         )
         if expect_completed:
             assert transmission_info.status == transmission_rpc.Status.SEEDING
-            assert transmission_info.percent_complete == 1
             assert transmission_info.percent_done == 1
             assert transmission_info.left_until_done == 0
             assert expect_pieces is not None or all(pieces)
@@ -143,6 +142,7 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
         files,
         piece_size,
         before_add=None,
+        files_wanted=None,
     ):
         path = pathlib.Path(download_dir) / f"test_torrent_{uuid.uuid4()}"
         path.mkdir()
@@ -156,7 +156,18 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
         if before_add is not None:
             before_add(path)
 
-        transmission_torrent = transmission_client.add_torrent(torf_torrent.dump())
+        files_wanted = (
+            [True] * len(torf_torrent.files) if files_wanted is None else files_wanted
+        )
+        assert len(files_wanted) == len(torf_torrent.files)
+        unwanted_files = [
+            file_index
+            for file_index, file_wanted in enumerate(files_wanted)
+            if not file_wanted
+        ]
+        transmission_torrent = transmission_client.add_torrent(
+            torf_torrent.dump(), files_unwanted=unwanted_files
+        )
 
         transmission_info = transmission_client.get_torrent(
             transmission_torrent.id,
@@ -166,7 +177,7 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
             ],
         )
         assert transmission_info.info_hash == torf_torrent.infohash
-        assert all(transmission_info.wanted)
+        assert transmission_info.wanted == files_wanted
 
         run_verify_torrent(transmission_torrent.id, request=False)
 
@@ -227,6 +238,24 @@ def test_noop_multifile_onepiece(
 ):
     torrent = setup_torrent(
         files={"test0.txt": b"0000", "test1.txt": b"0000", "test3.txt": b"0000"},
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 1
+    assert_torrent_status(torrent.transmission.id)
+    transmission_delete_unwanted_torrent(torrent)
+    run_verify_torrent(torrent.transmission.id)
+    assert_torrent_status(torrent.transmission.id)
+
+
+def test_noop_multifile_onepiece_unwanted(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={"test0.txt": b"0000", "test1.txt": b"0000", "test3.txt": b"0000"},
+        files_wanted=[True, False, True],
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 1
@@ -304,6 +333,37 @@ def test_noop_multifile_multipiece_aligned_incomplete(
     check_torrent_status()
 
 
+def test_noop_multifile_multipiece_aligned_incomplete_unwanted(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": b"0" * _MIN_PIECE_SIZE,
+            "test1.txt": b"1" * _MIN_PIECE_SIZE,
+            "test2.txt": b"2" * _MIN_PIECE_SIZE,
+        },
+        files_wanted=[True, False, True],
+        piece_size=_MIN_PIECE_SIZE,
+        before_add=lambda path: (path / "test1.txt").unlink(),
+    )
+    assert torrent.torf.pieces == 3
+
+    def check_torrent_status():
+        assert_torrent_status(
+            torrent.transmission.id,
+            expect_completed=True,
+            expect_pieces=[True, False, True],
+        )
+
+    check_torrent_status()
+    transmission_delete_unwanted_torrent(torrent)
+    run_verify_torrent(torrent.transmission.id)
+    check_torrent_status()
+
+
 def test_noop_multifile_multipiece_unaligned_incomplete(
     transmission_delete_unwanted_torrent,
     setup_torrent,
@@ -329,6 +389,39 @@ def test_noop_multifile_multipiece_unaligned_incomplete(
         )
 
     check_torrent_status()
+    transmission_delete_unwanted_torrent(torrent)
+    run_verify_torrent(torrent.transmission.id)
+    check_torrent_status()
+
+
+def test_noop_multifile_multipiece_unaligned_incomplete_unwanted(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": b"x" * (_MIN_PIECE_SIZE + 1),
+            "test1.txt": b"x" * _MIN_PIECE_SIZE,
+            "test2.txt": b"x" * _MIN_PIECE_SIZE,
+        },
+        files_wanted=[True, False, True],
+        piece_size=_MIN_PIECE_SIZE,
+        before_add=lambda path: (path / "test1.txt").unlink(),
+    )
+    assert torrent.torf.pieces == 4
+
+    def check_torrent_status():
+        assert_torrent_status(
+            torrent.transmission.id,
+            expect_completed=False,
+            expect_pieces=[True, False, False, True],
+        )
+
+    check_torrent_status()
+    # Should be a no-op because there is no piece that doesn't overlap with a wanted
+    # file.
     transmission_delete_unwanted_torrent(torrent)
     run_verify_torrent(torrent.transmission.id)
     check_torrent_status()
