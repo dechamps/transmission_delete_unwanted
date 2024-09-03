@@ -280,9 +280,6 @@ def test_noop_multifile_multipiece_aligned_incomplete(
     assert_torrent_status,
     run_verify_torrent,
 ):
-    def before_add(path):
-        (path / "test1.txt").unlink()
-
     torrent = setup_torrent(
         files={
             "test0.txt": b"0" * _MIN_PIECE_SIZE,
@@ -290,7 +287,7 @@ def test_noop_multifile_multipiece_aligned_incomplete(
             "test2.txt": b"2" * _MIN_PIECE_SIZE,
         },
         piece_size=_MIN_PIECE_SIZE,
-        before_add=before_add,
+        before_add=lambda path: (path / "test1.txt").unlink(),
     )
     assert torrent.torf.pieces == 3
 
@@ -313,10 +310,6 @@ def test_noop_multifile_multipiece_unaligned_incomplete(
     assert_torrent_status,
     run_verify_torrent,
 ):
-
-    def before_add(path):
-        (path / "test1.txt").unlink()
-
     torrent = setup_torrent(
         files={
             "test0.txt": b"x" * (_MIN_PIECE_SIZE + 1),
@@ -324,7 +317,7 @@ def test_noop_multifile_multipiece_unaligned_incomplete(
             "test2.txt": b"x" * _MIN_PIECE_SIZE,
         },
         piece_size=_MIN_PIECE_SIZE,
-        before_add=before_add,
+        before_add=lambda path: (path / "test1.txt").unlink(),
     )
     assert torrent.torf.pieces == 4
 
