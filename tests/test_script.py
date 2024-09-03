@@ -4,6 +4,7 @@ import enum
 import socket
 import subprocess
 import pathlib
+import shutil
 import uuid
 import backoff
 import pytest
@@ -72,6 +73,8 @@ def _fixture_transmission_daemon(tmp_path):
         #   https://github.com/trim21/transmission-rpc/issues/483
         daemon_process.terminate()
         daemon_process.wait()
+        shutil.rmtree(download_dir)
+        shutil.rmtree(config_dir)
 
 
 @pytest.fixture(name="transmission_client")
