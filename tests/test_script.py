@@ -30,20 +30,20 @@ def find_free_port():
 
 
 @backoff.on_exception(
-    backoff.expo, ConnectionRefusedError, factor=0.05, max_time=30, jitter=None
+    backoff.constant, ConnectionRefusedError, interval=0.1, max_time=30, jitter=None
 )
 def _try_connect(address):
     socket.create_connection(address).close()
 
 
-@backoff.on_predicate(backoff.expo, factor=0.05, max_time=30, jitter=None)
+@backoff.on_predicate(backoff.constant, interval=0.1, max_time=30, jitter=None)
 def _poll_until(predicate):
     return predicate()
 
 
 @pytest.fixture(name="transmission_url", scope="session")
 def _fixture_transmission_daemon(tmp_path_factory):
-    tmp_path = tmp_path_factory.mktemp("transmission")
+    tmp_path = tmp_path_factory.mktemp("transmission-")
     address = "127.0.0.1"
     config_dir = tmp_path / "config"
     config_dir.mkdir()
