@@ -1,4 +1,6 @@
 import argparse
+import humanize
+import sys
 import transmission_rpc
 from transmission_delete_unwanted import pieces
 
@@ -30,6 +32,9 @@ def _process_torrent(transmission_client, torrent_id):
     torrent = transmission_client.get_torrent(
         torrent_id,
         arguments=[
+            "id",
+            "infohash",
+            "name",
             "files",
             "pieces",
             "pieceCount",
@@ -37,8 +42,12 @@ def _process_torrent(transmission_client, torrent_id):
             "wanted",
         ],
     )
+    print(
+        f'>>> PROCESSING TORRENT: "{torrent.name}" (hash: {torrent.info_hash} id:'
+        f" {torrent.id})"
+    )
 
-    wanted_pieces = [None] * torrent.piece_count
+    pieces_wanted = [None] * torrent.piece_count
     # Note we use torrent.fields["files"], not torrent.get_files(), to work around
     # https://github.com/trim21/transmission-rpc/issues/455
     current_offset = 0
@@ -55,20 +64,43 @@ def _process_torrent(transmission_client, torrent_id):
             # The value for that piece may already have been set by the previous
             # file, due to unaligned piece/file boundaries. In this case, a piece
             # is wanted if it overlaps with any wanted file.
-            wanted_pieces[piece_index] = wanted_pieces[piece_index] or file_wanted
+            pieces_wanted[piece_index] = pieces_wanted[piece_index] or file_wanted
         current_offset += file_length
-    assert all(wanted_piece is not None for wanted_piece in wanted_pieces)
+    assert all(wanted_piece is not None for wanted_piece in pieces_wanted)
+
+    pieces_present = pieces.to_array(torrent.pieces, torrent.piece_count)
+    pieces_present_unwanted = [
+        present and not wanted
+        for wanted, present in zip(
+            pieces_wanted,
+            pieces_present,
+            strict=True,
+        )
+    ]
+
+    piece_size = torrent.piece_size
+
+    def _format_piece_count(piece_count):
+        return f"{piece_count} pieces" + (
+            ""
+            if piece_count == 0
+            else f" ({humanize.naturalsize(piece_count * piece_size, binary=True)})"
+        )
+
+    pieces_present_unwanted_count = pieces_present_unwanted.count(True)
+    print(
+        f"Wanted: {_format_piece_count(pieces_wanted.count(True))}; present:"
+        f" {_format_piece_count(pieces_present.count(True))}; present and not wanted:"
+        f" {_format_piece_count(pieces_present_unwanted_count)}"
+    )
+
+    if pieces_present_unwanted_count == 0:
+        print("Every downloaded piece is wanted. Nothing to do.")
+        return
 
     # Actual functionality not implemented yet; for now, just fail if anything needs
     # to be done
-    assert all(
-        wanted or not present
-        for wanted, present in zip(
-            wanted_pieces,
-            pieces.to_array(torrent.pieces, torrent.piece_count),
-            strict=True,
-        )
-    )
+    assert False
 
 
 def main(args=None):

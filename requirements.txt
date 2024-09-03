@@ -8,6 +8,8 @@ certifi==2024.8.30
     # via requests
 charset-normalizer==3.3.2
     # via requests
+humanize==4.10.0
+    # via -r requirements.in
 idna==3.8
     # via requests
 requests==2.32.3
