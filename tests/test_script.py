@@ -151,6 +151,9 @@ TorrentFile = collections.namedtuple(
 def _fixture_setup_torrent(transmission_client, run_verify_torrent):
     download_dir = transmission_client.get_session().download_dir
 
+    paths = []
+    transmission_torrent_ids = []
+
     def create_torrent(
         files,
         piece_size,
@@ -159,6 +162,7 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
     ):
         path = pathlib.Path(download_dir) / f"test_torrent_{uuid.uuid4()}"
         path.mkdir()
+        paths.append(path)
         for file_name, torrent_file in files.items():
             with open(path / file_name, "wb") as file:
                 file.write(torrent_file.contents)
@@ -178,6 +182,7 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
         transmission_torrent = transmission_client.add_torrent(
             torf_torrent.dump(), files_unwanted=unwanted_files
         )
+        transmission_torrent_ids.append(transmission_torrent.id)
 
         transmission_info = transmission_client.get_torrent(
             transmission_torrent.id,
@@ -201,7 +206,12 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
             transmission=transmission_torrent,
         )
 
-    return create_torrent
+    yield create_torrent
+
+    if len(transmission_torrent_ids) > 0:
+        transmission_client.remove_torrent(transmission_torrent_ids)
+    for path in paths:
+        shutil.rmtree(path)
 
 
 @pytest.fixture(name="transmission_delete_unwanted")
