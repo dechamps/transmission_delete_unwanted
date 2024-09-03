@@ -41,12 +41,13 @@ def _poll_until(predicate):
     return predicate()
 
 
-@pytest.fixture(name="transmission_url")
-def _fixture_transmission_daemon(tmp_path):
+@pytest.fixture(name="transmission_url", scope="session")
+def _fixture_transmission_daemon(tmp_path_factory):
+    tmp_path = tmp_path_factory.mktemp("transmission")
     address = "127.0.0.1"
-    config_dir = tmp_path / "transmission_config"
+    config_dir = tmp_path / "config"
     config_dir.mkdir()
-    download_dir = tmp_path / "transmission_download"
+    download_dir = tmp_path / "download"
     download_dir.mkdir()
     rpc_port = find_free_port()
     daemon_process = subprocess.Popen([
