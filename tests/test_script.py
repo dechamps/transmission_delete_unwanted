@@ -174,7 +174,6 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
         if before_add is not None:
             before_add(path)
 
-        print(torf_torrent.files)
         unwanted_files = [
             file_index
             for file_index, file in enumerate(torf_torrent.files)
