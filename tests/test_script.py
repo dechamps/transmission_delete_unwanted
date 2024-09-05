@@ -159,7 +159,6 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
         files,
         piece_size,
         before_add=None,
-        files_wanted=None,
     ):
         path = pathlib.Path(download_dir) / f"test_torrent_{uuid.uuid4()}"
         path.mkdir()
@@ -299,10 +298,9 @@ def test_noop_multifile_onepiece_unwanted(
     torrent = setup_torrent(
         files={
             "test0.txt": TorrentFile(b"0000"),
-            "test1.txt": TorrentFile(b"0000"),
+            "test1.txt": TorrentFile(b"0000", wanted=False),
             "test3.txt": TorrentFile(b"0000"),
         },
-        files_wanted=[True, False, True],
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 1
@@ -452,7 +450,6 @@ def test_noop_multifile_multipiece_unaligned_incomplete_unwanted(
             "test1.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE, wanted=False),
             "test2.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE),
         },
-        files_wanted=[True, False, True],
         piece_size=_MIN_PIECE_SIZE,
         before_add=lambda path: (path / "test1.txt").unlink(),
     )
@@ -485,7 +482,6 @@ def test_delete_aligned(
             "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
             "test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
         },
-        files_wanted=[True, False, True],
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 3
