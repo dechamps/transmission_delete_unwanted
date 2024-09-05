@@ -240,6 +240,19 @@ def _fixture_transmission_delete_unwanted_torrent(
     )
 
 
+def _check_file_tree(root, files_contents):
+    for directory_path, _, file_names in root.walk():
+        for file_name in file_names:
+            file_contents = files_contents.get(file_name)
+            assert file_contents is not None, f"Did not expect to find {file_name}"
+            del files_contents[file_name]
+
+            with open(directory_path / file_name, "rb") as file:
+                assert file.read() == file_contents, f"Contents mismatch in {file_name}"
+
+    assert len(files_contents) == 0, f"Files not found: {list(files_contents.keys())}"
+
+
 def test_noop_onefile_onepiece(
     transmission_delete_unwanted_torrent,
     setup_torrent,
@@ -458,3 +471,35 @@ def test_noop_multifile_multipiece_unaligned_incomplete_unwanted(
     transmission_delete_unwanted_torrent(torrent)
     run_verify_torrent(torrent.transmission.id)
     check_torrent_status()
+
+
+def test_delete_aligned(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
+            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+            "test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+        },
+        files_wanted=[True, False, True],
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 3
+    assert_torrent_status(torrent.transmission.id)
+    transmission_delete_unwanted_torrent(torrent)
+    _check_file_tree(
+        torrent.path,
+        {
+            "test0.txt": b"0" * _MIN_PIECE_SIZE,
+            "test2.txt": b"2" * _MIN_PIECE_SIZE,
+        },
+    )
+    run_verify_torrent(torrent.transmission.id)
+    assert_torrent_status(
+        torrent.transmission.id,
+        expect_pieces=[True, False, True],
+    )

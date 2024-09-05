@@ -1,6 +1,6 @@
 import argparse
 import humanize
-import sys
+import pathlib
 import transmission_rpc
 from transmission_delete_unwanted import pieces
 
@@ -28,7 +28,7 @@ def _parse_arguments(args=None):
     return argument_parser.parse_args(args)
 
 
-def _process_torrent(transmission_client, torrent_id):
+def _process_torrent(transmission_client, torrent_id, download_dir):
     torrent = transmission_client.get_torrent(
         torrent_id,
         arguments=[
@@ -98,16 +98,33 @@ def _process_torrent(transmission_client, torrent_id):
         print("Every downloaded piece is wanted. Nothing to do.")
         return
 
-    # Actual functionality not implemented yet; for now, just fail if anything needs
-    # to be done
-    assert False
+    current_offset = 0
+    for file, file_wanted in zip(torrent.fields["files"], torrent.wanted):
+        file_length = file["length"]
+        begin_piece = current_offset // torrent.piece_size
+        end_piece = -(-(current_offset + file_length) // torrent.piece_size)
+
+        if any(pieces_present_unwanted[begin_piece:end_piece]):
+            assert not file_wanted
+            # TODO: support unaligned files
+            assert all(pieces_present_unwanted[begin_piece:end_piece])
+
+            # TODO: handle the case where the file has a .part suffix
+            # TODO: delete empty directories
+            file_name = file["name"]
+            print(f"Removing: {file_name}")
+            (download_dir / file_name).unlink()
+
+        current_offset += file_length
 
 
 def main(args=None):
     args = _parse_arguments(args)
     with transmission_rpc.from_url(args.transmission_url) as transmission_client:
+        download_dir = pathlib.Path(transmission_client.get_session().download_dir)
         torrent_id = args.torrent_id
         _process_torrent(
-            transmission_client,
-            torrent_id if len(torrent_id) == 40 else int(torrent_id),
+            transmission_client=transmission_client,
+            torrent_id=torrent_id if len(torrent_id) == 40 else int(torrent_id),
+            download_dir=download_dir,
         )
