@@ -164,7 +164,9 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
         path.mkdir()
         paths.append(path)
         for file_name, torrent_file in files.items():
-            with open(path / file_name, "wb") as file:
+            file_path = path / file_name
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, "wb") as file:
                 file.write(torrent_file.contents)
         torf_torrent = torf.Torrent(path=path, piece_size=piece_size, private=True)
         torf_torrent.generate()
@@ -242,12 +244,13 @@ def _fixture_transmission_delete_unwanted_torrent(
 def _check_file_tree(root, files_contents):
     for directory_path, _, file_names in root.walk():
         for file_name in file_names:
-            file_contents = files_contents.get(file_name)
-            assert file_contents is not None, f"Did not expect to find {file_name}"
-            del files_contents[file_name]
+            file_path = directory_path / file_name
+            file_contents = files_contents.get(file_path)
+            assert file_contents is not None, f"Did not expect to find {file_path}"
+            del files_contents[file_path]
 
-            with open(directory_path / file_name, "rb") as file:
-                assert file.read() == file_contents, f"Contents mismatch in {file_name}"
+            with open(file_path, "rb") as file:
+                assert file.read() == file_contents, f"Contents mismatch in {file_path}"
 
     assert len(files_contents) == 0, f"Files not found: {list(files_contents.keys())}"
 
@@ -490,10 +493,44 @@ def test_delete_aligned(
     _check_file_tree(
         torrent.path,
         {
-            "test0.txt": b"0" * _MIN_PIECE_SIZE,
-            "test2.txt": b"2" * _MIN_PIECE_SIZE,
+            torrent.path / "test0.txt": b"0" * _MIN_PIECE_SIZE,
+            torrent.path / "test2.txt": b"2" * _MIN_PIECE_SIZE,
         },
     )
+    run_verify_torrent(torrent.transmission.id)
+    assert_torrent_status(
+        torrent.transmission.id,
+        expect_pieces=[True, False, True],
+    )
+
+
+def test_delete_directory(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "subdir0/test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
+            "subdir1/test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+            "subdir2/test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 3
+    assert_torrent_status(torrent.transmission.id)
+    directory_to_delete = torrent.path / "subdir1"
+    assert directory_to_delete.exists()
+    transmission_delete_unwanted_torrent(torrent)
+    _check_file_tree(
+        torrent.path,
+        {
+            torrent.path / "subdir0/test0.txt": b"0" * _MIN_PIECE_SIZE,
+            torrent.path / "subdir2/test2.txt": b"2" * _MIN_PIECE_SIZE,
+        },
+    )
+    assert not directory_to_delete.exists()
     run_verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,

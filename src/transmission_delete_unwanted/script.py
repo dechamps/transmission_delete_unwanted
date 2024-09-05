@@ -28,6 +28,12 @@ def _parse_arguments(args=None):
     return argument_parser.parse_args(args)
 
 
+def _is_dir_empty(path):
+    for child in path.iterdir():
+        return False
+    return True
+
+
 def _process_torrent(transmission_client, torrent_id, download_dir):
     torrent = transmission_client.get_torrent(
         torrent_id,
@@ -110,10 +116,13 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
             assert all(pieces_present_unwanted[begin_piece:end_piece])
 
             # TODO: handle the case where the file has a .part suffix
-            # TODO: delete empty directories
             file_name = file["name"]
             print(f"Removing: {file_name}")
-            (download_dir / file_name).unlink()
+            file_path = download_dir / file_name
+            parent_dir = file_path.parent
+            file_path.unlink()
+            if _is_dir_empty(parent_dir):
+                parent_dir.rmdir()
 
         current_offset += file_length
 
