@@ -63,6 +63,43 @@ def _remove_torrent_file(download_dir, file_name):
         parent_dir = parent_dir.parent
 
 
+def _turn_torrent_file_into_partial(
+    download_dir, file_name, keep_first_bytes, keep_last_bytes
+):
+    print(f"Turning into partial: {file_name}")
+
+    # Note: on some operating systems there are ways to do this in-place without any
+    # copies ("hole punching"), e.g. fallocate(FALLOC_FL_PUNCH_HOLE) on Linux. This
+    # doesn't seem to be worth the extra complexity though, given the amount of data
+    # being copied should be relatively small.
+    original_file_path = download_dir / file_name
+    part_file_path = download_dir / f"{file_name}.part"
+    new_file_path = download_dir / f"{file_name}.transmission-delete-unwanted-tmp"
+    try:
+        with open(
+            original_file_path if original_file_path.exists() else part_file_path, "rb"
+        ) as original_file, open(new_file_path, "wb") as new_file:
+            # TODO: this could potentially load an unbounded amount of data in memory,
+            # especially if the torrent is using a large piece size. We should break the
+            # copy operation down into small buffers. Even better would be to use an
+            # optimized function such as `os.copy_file_range()` or `os.sendfile()` but
+            # these are sadly platform-dependent.
+            if keep_first_bytes > 0:
+                new_file.write(original_file.read(keep_first_bytes))
+            if keep_last_bytes > 0:
+                original_file.seek(
+                    -keep_last_bytes,
+                    2,  # Seek from the end
+                )
+                new_file.seek(original_file.tell())
+                new_file.write(original_file.read(keep_last_bytes))
+
+        new_file_path.replace(part_file_path)
+        original_file_path.unlink(missing_ok=True)
+    finally:
+        new_file_path.unlink(missing_ok=True)
+
+
 def _process_torrent(transmission_client, torrent_id, download_dir):
     torrent = transmission_client.get_torrent(
         torrent_id,
@@ -136,17 +173,46 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
     current_offset = 0
     for file, file_wanted in zip(torrent.fields["files"], torrent.wanted):
         file_length = file["length"]
-        begin_piece = current_offset // torrent.piece_size
-        end_piece = -(-(current_offset + file_length) // torrent.piece_size)
+        begin_piece = current_offset // piece_size
+        end_piece = -(-(current_offset + file_length) // piece_size)
+        next_offset = current_offset + file_length
 
         if any(pieces_present_unwanted[begin_piece:end_piece]):
             assert not file_wanted
-            # TODO: support unaligned files
-            assert not any(pieces_wanted[begin_piece:end_piece])
+            if any(pieces_wanted[begin_piece:end_piece]):
+                # The file contains pieces that overlap with wanted, adjacent files. We
+                # can't get rid of the file without corrupting these pieces; best we can
+                # do is turn it into a partial file.
 
-            _remove_torrent_file(download_dir, file["name"])
+                # Sanity check that the wanted pieces are where we expect them to be.
+                assert (
+                    current_offset % piece_size != 0 or not pieces_wanted[begin_piece]
+                )
+                assert next_offset % piece_size != 0 or not pieces_wanted[end_piece - 1]
+                assert not any(pieces_wanted[begin_piece + 1 : end_piece - 1])
 
-        current_offset += file_length
+                keep_first_bytes = (
+                    (begin_piece + 1) * piece_size - current_offset
+                    if pieces_wanted[begin_piece]
+                    else 0
+                )
+                assert 0 <= keep_first_bytes < piece_size
+                keep_last_bytes = piece_size - (end_piece * piece_size - next_offset)
+                assert 0 <= keep_last_bytes < piece_size
+                assert keep_first_bytes > 0 or keep_last_bytes > 0
+                assert (keep_first_bytes + keep_last_bytes) < file_length
+                _turn_torrent_file_into_partial(
+                    download_dir,
+                    file["name"],
+                    keep_first_bytes=keep_first_bytes,
+                    keep_last_bytes=keep_last_bytes,
+                )
+            else:
+                # The file does not contain any data from wanted pieces; we can safely
+                # get rid of it.
+                _remove_torrent_file(download_dir, file["name"])
+
+        current_offset = next_offset
 
 
 def main(args=None):
