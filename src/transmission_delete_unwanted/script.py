@@ -29,7 +29,7 @@ def _parse_arguments(args=None):
 
 
 def _is_dir_empty(path):
-    for child in path.iterdir():
+    for _ in path.iterdir():
         return False
     return True
 
