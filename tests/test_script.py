@@ -536,3 +536,35 @@ def test_delete_directory(
         torrent.transmission.id,
         expect_pieces=[True, False, True],
     )
+
+
+def test_delete_part(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
+            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+            "test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+        before_add=lambda path: (path / "test1.txt").rename(path / "test1.txt.part"),
+    )
+    assert torrent.torf.pieces == 3
+    assert_torrent_status(torrent.transmission.id)
+    transmission_delete_unwanted_torrent(torrent)
+    _check_file_tree(
+        torrent.path,
+        {
+            torrent.path / "test0.txt": b"0" * _MIN_PIECE_SIZE,
+            torrent.path / "test2.txt": b"2" * _MIN_PIECE_SIZE,
+        },
+    )
+    run_verify_torrent(torrent.transmission.id)
+    assert_torrent_status(
+        torrent.transmission.id,
+        expect_pieces=[True, False, True],
+    )

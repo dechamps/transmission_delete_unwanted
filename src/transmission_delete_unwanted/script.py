@@ -34,6 +34,34 @@ def _is_dir_empty(path):
     return True
 
 
+def _remove_torrent_file(download_dir, file_name):
+    removed = False
+
+    file_path = download_dir / file_name
+    if file_path.exists():
+        print(f"Removing: {file_name}")
+        file_path.unlink()
+        removed = True
+
+    # Note: in the very unlikely scenario that a torrent contains a file named
+    # "xxx" *and* another file named "xxx.part", this may end up deleting the
+    # wrong file. For now we just accept the risk.
+    part_file_name = f"{file_name}.part"
+    part_file_path = download_dir / part_file_name
+    if part_file_path.exists():
+        print(f"Removing: {part_file_name}")
+        part_file_path.unlink()
+        removed = True
+
+    if not removed:
+        print(f"WARNING: could not find {file_name} to delete")
+        return
+
+    parent_dir = file_path.parent
+    if _is_dir_empty(parent_dir):
+        parent_dir.rmdir()
+
+
 def _process_torrent(transmission_client, torrent_id, download_dir):
     torrent = transmission_client.get_torrent(
         torrent_id,
@@ -115,14 +143,7 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
             # TODO: support unaligned files
             assert all(pieces_present_unwanted[begin_piece:end_piece])
 
-            # TODO: handle the case where the file has a .part suffix
-            file_name = file["name"]
-            print(f"Removing: {file_name}")
-            file_path = download_dir / file_name
-            parent_dir = file_path.parent
-            file_path.unlink()
-            if _is_dir_empty(parent_dir):
-                parent_dir.rmdir()
+            _remove_torrent_file(download_dir, file["name"])
 
         current_offset += file_length
 
