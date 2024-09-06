@@ -661,6 +661,69 @@ def test_partial_unaligned(
     )
 
 
+@pytest.mark.parametrize("left_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
+@pytest.mark.parametrize("right_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
+@pytest.mark.parametrize(
+    "corrupt_first_piece,corrupt_last_piece",
+    [(True, False), (False, True), (True, True)],
+)
+def test_partial_unaligned_incomplete(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+    left_shift_bytes,
+    right_shift_bytes,
+    corrupt_first_piece,
+    corrupt_last_piece,
+):
+    def _corrupt_pieces(path):
+        with open(path / "test1.txt", "r+b") as file:
+            if corrupt_first_piece:
+                file.write(b"x")
+            if corrupt_last_piece:
+                file.seek(_MIN_PIECE_SIZE * 2)
+                file.write(b"x")
+
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE + left_shift_bytes)),
+            "test1.txt": TorrentFile(
+                b"1" * (_MIN_PIECE_SIZE * 3 - left_shift_bytes - right_shift_bytes),
+                wanted=False,
+            ),
+            "test2.txt": TorrentFile(b"2" * (_MIN_PIECE_SIZE + right_shift_bytes)),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+        before_add=_corrupt_pieces,
+    )
+    assert torrent.torf.pieces == 5
+    assert_torrent_status(
+        torrent.transmission.id,
+        expect_completed=False,
+        expect_pieces=[
+            True,
+            not corrupt_first_piece,
+            True,
+            not corrupt_last_piece,
+            True,
+        ],
+    )
+    transmission_delete_unwanted_torrent(torrent)
+    run_verify_torrent(torrent.transmission.id)
+    assert_torrent_status(
+        torrent.transmission.id,
+        expect_completed=False,
+        expect_pieces=[
+            True,
+            not corrupt_first_piece,
+            False,
+            not corrupt_last_piece,
+            True,
+        ],
+    )
+
+
 def test_delete_directory(
     transmission_delete_unwanted_torrent,
     setup_torrent,
