@@ -197,10 +197,13 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
                     else 0
                 )
                 assert 0 <= keep_first_bytes < piece_size
-                keep_last_bytes = piece_size - (end_piece * piece_size - next_offset)
+                keep_last_bytes = (
+                    piece_size - (end_piece * piece_size - next_offset)
+                    if pieces_wanted[end_piece - 1]
+                    else piece_size
+                )
                 assert 0 < keep_last_bytes <= piece_size
-                if keep_last_bytes == piece_size:
-                    keep_last_bytes = 0
+                keep_last_bytes %= piece_size
                 assert keep_first_bytes > 0 or keep_last_bytes > 0
                 assert (keep_first_bytes + keep_last_bytes) < file_length
                 _turn_torrent_file_into_partial(
