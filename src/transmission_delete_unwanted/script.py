@@ -141,13 +141,18 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
     assert all(wanted_piece is not None for wanted_piece in pieces_wanted)
 
     pieces_present = pieces.to_array(torrent.pieces, torrent.piece_count)
-    pieces_present_unwanted = [
-        present and not wanted
-        for wanted, present in zip(
+    pieces_wanted_present = list(
+        zip(
             pieces_wanted,
             pieces_present,
             strict=True,
         )
+    )
+    pieces_present_wanted = [
+        present and wanted for wanted, present in pieces_wanted_present
+    ]
+    pieces_present_unwanted = [
+        present and not wanted for wanted, present in pieces_wanted_present
     ]
 
     piece_size = torrent.piece_size
@@ -162,8 +167,9 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
     pieces_present_unwanted_count = pieces_present_unwanted.count(True)
     print(
         f"Wanted: {_format_piece_count(pieces_wanted.count(True))}; present:"
-        f" {_format_piece_count(pieces_present.count(True))}; present and not wanted:"
-        f" {_format_piece_count(pieces_present_unwanted_count)}"
+        f" {_format_piece_count(pieces_present.count(True))}; present and wanted:"
+        f" {_format_piece_count(pieces_present_wanted.count(True))}; present and not"
+        f" wanted: {_format_piece_count(pieces_present_unwanted_count)}"
     )
 
     if pieces_present_unwanted_count == 0:
@@ -179,10 +185,12 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
 
         if any(pieces_present_unwanted[begin_piece:end_piece]):
             assert not file_wanted
-            if any(pieces_wanted[begin_piece:end_piece]):
-                # The file contains pieces that overlap with wanted, adjacent files. We
-                # can't get rid of the file without corrupting these pieces; best we can
-                # do is turn it into a partial file.
+            if any(pieces_present_wanted[begin_piece:end_piece]):
+                # The file is not wanted, but it contains valid pieces that are wanted.
+                # In practice this means the file contains pieces that overlap with
+                # wanted, adjacent files. We can't get rid of the file without
+                # corrupting these pieces; best we can do is turn it into a partial
+                # file.
 
                 # Sanity check that the wanted pieces are where we expect them to be.
                 assert (
@@ -193,13 +201,13 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
 
                 keep_first_bytes = (
                     (begin_piece + 1) * piece_size - current_offset
-                    if pieces_wanted[begin_piece]
+                    if pieces_present_wanted[begin_piece]
                     else 0
                 )
                 assert 0 <= keep_first_bytes < piece_size
                 keep_last_bytes = (
                     piece_size - (end_piece * piece_size - next_offset)
-                    if pieces_wanted[end_piece - 1]
+                    if pieces_present_wanted[end_piece - 1]
                     else piece_size
                 )
                 assert 0 < keep_last_bytes <= piece_size
@@ -213,8 +221,8 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
                     keep_last_bytes=keep_last_bytes,
                 )
             else:
-                # The file does not contain any data from wanted pieces; we can safely
-                # get rid of it.
+                # The file does not contain any data from wanted, valid pieces; we can
+                # safely get rid of it.
                 _remove_torrent_file(download_dir, file["name"])
 
         current_offset = next_offset

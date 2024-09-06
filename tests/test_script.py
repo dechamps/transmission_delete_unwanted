@@ -664,7 +664,7 @@ def test_partial_unaligned(
 @pytest.mark.parametrize("left_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
 @pytest.mark.parametrize("right_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
 @pytest.mark.parametrize(
-    "corrupt_first_piece,corrupt_last_piece",
+    "incomplete_first_piece,incomplete_last_piece",
     [(True, False), (False, True), (True, True)],
 )
 def test_partial_unaligned_incomplete(
@@ -674,14 +674,14 @@ def test_partial_unaligned_incomplete(
     run_verify_torrent,
     left_shift_bytes,
     right_shift_bytes,
-    corrupt_first_piece,
-    corrupt_last_piece,
+    incomplete_first_piece,
+    incomplete_last_piece,
 ):
     def _corrupt_pieces(path):
         with open(path / "test1.txt", "r+b") as file:
-            if corrupt_first_piece:
+            if incomplete_first_piece:
                 file.write(b"x")
-            if corrupt_last_piece:
+            if incomplete_last_piece:
                 file.seek(_MIN_PIECE_SIZE * 2)
                 file.write(b"x")
 
@@ -703,22 +703,53 @@ def test_partial_unaligned_incomplete(
         expect_completed=False,
         expect_pieces=[
             True,
-            not corrupt_first_piece,
+            not incomplete_first_piece,
             True,
-            not corrupt_last_piece,
+            not incomplete_last_piece,
             True,
         ],
     )
     transmission_delete_unwanted_torrent(torrent)
+    _check_file_tree(
+        torrent.path,
+        (
+            {
+                torrent.path / "test0.txt": b"0" * (_MIN_PIECE_SIZE + left_shift_bytes),
+                torrent.path
+                / "test2.txt": b"2" * (_MIN_PIECE_SIZE + right_shift_bytes),
+            }
+            | (
+                # Given the middle piece is unwanted, if both the first piece and the
+                # last piece are incomplete, then there are no valid wanted pieces left
+                # and the file should be deleted.
+                {}
+                if incomplete_first_piece and incomplete_last_piece
+                else {
+                    # Otherwise, we should only find data for the valid, wanted pieces.
+                    torrent.path
+                    / "test1.txt.part": (
+                        b"\x00" if incomplete_first_piece else b"1"
+                    ) * (_MIN_PIECE_SIZE - left_shift_bytes) + (
+                        b""
+                        if incomplete_last_piece
+                        else (
+                            b"\x00" * _MIN_PIECE_SIZE
+                            + b"1" * (_MIN_PIECE_SIZE - right_shift_bytes)
+                        )
+                    )
+                }
+            )
+        ),
+    )
     run_verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_completed=False,
         expect_pieces=[
             True,
-            not corrupt_first_piece,
+            not incomplete_first_piece,
             False,
-            not corrupt_last_piece,
+            not incomplete_last_piece,
             True,
         ],
     )
