@@ -411,15 +411,17 @@ def test_noop_multifile_multipiece_aligned_incomplete_unwanted(
     check_torrent_status()
 
 
+@pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
 def test_noop_multifile_multipiece_unaligned_incomplete(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
     run_verify_torrent,
+    shift_bytes,
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"x" * (_MIN_PIECE_SIZE + 1)),
+            "test0.txt": TorrentFile(b"x" * (_MIN_PIECE_SIZE + shift_bytes)),
             "test1.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE),
             "test2.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE),
         },
@@ -441,15 +443,17 @@ def test_noop_multifile_multipiece_unaligned_incomplete(
     check_torrent_status()
 
 
+@pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
 def test_noop_multifile_multipiece_unaligned_incomplete_unwanted(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
     run_verify_torrent,
+    shift_bytes,
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"x" * (_MIN_PIECE_SIZE + 1)),
+            "test0.txt": TorrentFile(b"x" * (_MIN_PIECE_SIZE + shift_bytes)),
             "test1.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE, wanted=False),
             "test2.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE),
         },
@@ -544,15 +548,19 @@ def test_delete_aligned_incomplete(
     )
 
 
+@pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
 def test_partial_beginaligned(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
     run_verify_torrent,
+    shift_bytes,
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE + 1), wanted=False),
+            "test0.txt": TorrentFile(
+                b"0" * (_MIN_PIECE_SIZE + shift_bytes), wanted=False
+            ),
             "test1.txt": TorrentFile(b"1"),
         },
         piece_size=_MIN_PIECE_SIZE,
@@ -563,7 +571,8 @@ def test_partial_beginaligned(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "test0.txt.part": b"\x00" * _MIN_PIECE_SIZE + b"0",
+            torrent.path
+            / "test0.txt.part": b"\x00" * _MIN_PIECE_SIZE + b"0" * shift_bytes,
             torrent.path / "test1.txt": b"1",
         },
     )
@@ -574,16 +583,20 @@ def test_partial_beginaligned(
     )
 
 
+@pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
 def test_partial_endaligned(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
     run_verify_torrent,
+    shift_bytes,
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE - 1)),
-            "test1.txt": TorrentFile(b"1" * (_MIN_PIECE_SIZE + 1), wanted=False),
+            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE - shift_bytes)),
+            "test1.txt": TorrentFile(
+                b"1" * (_MIN_PIECE_SIZE + shift_bytes), wanted=False
+            ),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -593,8 +606,8 @@ def test_partial_endaligned(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "test0.txt": b"0" * (_MIN_PIECE_SIZE - 1),
-            torrent.path / "test1.txt.part": b"1",
+            torrent.path / "test0.txt": b"0" * (_MIN_PIECE_SIZE - shift_bytes),
+            torrent.path / "test1.txt.part": b"1" * shift_bytes,
         },
     )
     run_verify_torrent(torrent.transmission.id)
@@ -604,17 +617,24 @@ def test_partial_endaligned(
     )
 
 
+@pytest.mark.parametrize("left_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
+@pytest.mark.parametrize("right_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
 def test_partial_unaligned(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
     run_verify_torrent,
+    left_shift_bytes,
+    right_shift_bytes,
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE + 1)),
-            "test1.txt": TorrentFile(b"1" * (_MIN_PIECE_SIZE * 3 - 2), wanted=False),
-            "test2.txt": TorrentFile(b"2" * (_MIN_PIECE_SIZE + 1)),
+            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE + left_shift_bytes)),
+            "test1.txt": TorrentFile(
+                b"1" * (_MIN_PIECE_SIZE * 3 - left_shift_bytes - right_shift_bytes),
+                wanted=False,
+            ),
+            "test2.txt": TorrentFile(b"2" * (_MIN_PIECE_SIZE + right_shift_bytes)),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -624,14 +644,14 @@ def test_partial_unaligned(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "test0.txt": b"0" * (_MIN_PIECE_SIZE + 1),
+            torrent.path / "test0.txt": b"0" * (_MIN_PIECE_SIZE + left_shift_bytes),
             torrent.path
             / "test1.txt.part": (
-                b"1" * (_MIN_PIECE_SIZE - 1)
+                b"1" * (_MIN_PIECE_SIZE - left_shift_bytes)
                 + b"\x00" * _MIN_PIECE_SIZE
-                + b"1" * (_MIN_PIECE_SIZE - 1)
+                + b"1" * (_MIN_PIECE_SIZE - right_shift_bytes)
             ),
-            torrent.path / "test2.txt": b"2" * (_MIN_PIECE_SIZE + 1),
+            torrent.path / "test2.txt": b"2" * (_MIN_PIECE_SIZE + right_shift_bytes),
         },
     )
     run_verify_torrent(torrent.transmission.id)
