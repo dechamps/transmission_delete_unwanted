@@ -544,7 +544,67 @@ def test_delete_aligned_incomplete(
     )
 
 
-def test_partial(
+def test_partial_beginaligned(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE + 1), wanted=False),
+            "test1.txt": TorrentFile(b"1"),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 2
+    assert_torrent_status(torrent.transmission.id)
+    transmission_delete_unwanted_torrent(torrent)
+    _check_file_tree(
+        torrent.path,
+        {
+            torrent.path / "test0.txt.part": b"\x00" * _MIN_PIECE_SIZE + b"0",
+            torrent.path / "test1.txt": b"1",
+        },
+    )
+    run_verify_torrent(torrent.transmission.id)
+    assert_torrent_status(
+        torrent.transmission.id,
+        expect_pieces=[False, True],
+    )
+
+
+def test_partial_endaligned(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE - 1)),
+            "test1.txt": TorrentFile(b"1" * (_MIN_PIECE_SIZE + 1), wanted=False),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 2
+    assert_torrent_status(torrent.transmission.id)
+    transmission_delete_unwanted_torrent(torrent)
+    _check_file_tree(
+        torrent.path,
+        {
+            torrent.path / "test0.txt": b"0" * (_MIN_PIECE_SIZE - 1),
+            torrent.path / "test1.txt.part": b"1",
+        },
+    )
+    run_verify_torrent(torrent.transmission.id)
+    assert_torrent_status(
+        torrent.transmission.id,
+        expect_pieces=[True, False],
+    )
+
+
+def test_partial_unaligned(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
