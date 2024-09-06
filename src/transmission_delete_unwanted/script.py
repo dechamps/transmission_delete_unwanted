@@ -58,8 +58,9 @@ def _remove_torrent_file(download_dir, file_name):
         return
 
     parent_dir = file_path.parent
-    if _is_dir_empty(parent_dir):
+    while _is_dir_empty(parent_dir):
         parent_dir.rmdir()
+        parent_dir = parent_dir.parent
 
 
 def _process_torrent(transmission_client, torrent_id, download_dir):
