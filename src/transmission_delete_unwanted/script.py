@@ -142,7 +142,7 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
         if any(pieces_present_unwanted[begin_piece:end_piece]):
             assert not file_wanted
             # TODO: support unaligned files
-            assert all(pieces_present_unwanted[begin_piece:end_piece])
+            assert not any(pieces_wanted[begin_piece:end_piece])
 
             _remove_torrent_file(download_dir, file["name"])
 
