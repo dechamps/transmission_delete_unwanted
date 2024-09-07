@@ -115,7 +115,7 @@ def _compute_pieces_wanted(files, files_wanted, piece_size):
     pieces_wanted = [None] * -(-sum(file["length"] for file in files) // piece_size)
     current_offset = 0
     for file, file_wanted in zip(files, files_wanted):
-        assert file_wanted == 0 or file_wanted == 1
+        assert file_wanted in (0, 1)
         file_length = file["length"]
         # Compute piece boundaries. Note we can't use file["beginPiece"] and
         # file["endPiece"] for this because these are new fields that the
