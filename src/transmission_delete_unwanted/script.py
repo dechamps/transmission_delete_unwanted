@@ -14,10 +14,7 @@ def _parse_arguments(args):
     )
     argument_parser.add_argument(
         "--transmission-url",
-        help=(
-            "Transmission URL, e.g."
-            " http+unix://%2Frun%2Ftransmission%2Fsandbox%2Fsocket/transmission/rpc"
-        ),
+        help="Transmission URL, e.g. http://localhost:9091",
         required=False,
         default=argparse.SUPPRESS,
     )
