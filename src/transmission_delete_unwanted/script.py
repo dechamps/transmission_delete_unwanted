@@ -1,8 +1,8 @@
 import argparse
-import humanize
 import pathlib
 import sys
 import backoff
+import humanize
 import transmission_rpc
 from transmission_delete_unwanted import pieces
 
