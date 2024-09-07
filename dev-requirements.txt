@@ -4,8 +4,6 @@
 #
 #    pip-compile --strip-extras dev-requirements.in
 #
-backoff==2.2.1
-    # via -r dev-requirements.in
 flatbencode==0.2.1
     # via torf
 iniconfig==2.0.0

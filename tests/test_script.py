@@ -217,8 +217,8 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
 
 @pytest.fixture(name="transmission_delete_unwanted")
 def _fixture_transmission_delete_unwanted(transmission_url):
-    return lambda *kargs: transmission_delete_unwanted.script.main(
-        ["--transmission-url", transmission_url] + list(kargs)
+    return lambda *kargs, **kwargs: transmission_delete_unwanted.script.run(
+        ["--transmission-url", transmission_url] + list(kargs), **kwargs
     )
 
 
@@ -232,12 +232,13 @@ _TorrentIdKind = enum.Enum("TorrentIdKind", ["TRANSMISSION_ID", "HASH"])
 def _fixture_transmission_delete_unwanted_torrent(
     request, transmission_delete_unwanted
 ):
-    return lambda torrent, *kargs: transmission_delete_unwanted(
+    return lambda torrent, *kargs, **kwargs: transmission_delete_unwanted(
         "--torrent-id",
         {
             _TorrentIdKind.TRANSMISSION_ID: str(torrent.transmission.id),
             _TorrentIdKind.HASH: torrent.torf.infohash,
         }[request.param],
+        **kwargs,
     )
 
 
@@ -855,3 +856,25 @@ def test_delete_part(
         torrent.transmission.id,
         expect_pieces=[True, False, True],
     )
+
+
+def test_verify(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
+            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert_torrent_status(torrent.transmission.id)
+
+    def _before_check():
+        with open(torrent.path / "test0.txt", "wb") as file:
+            file.write(b"x")
+
+    with pytest.raises(transmission_delete_unwanted.script.CorruptTorrentException):
+        transmission_delete_unwanted_torrent(torrent, run_before_check=_before_check)

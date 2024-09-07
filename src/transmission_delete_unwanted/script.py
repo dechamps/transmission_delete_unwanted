@@ -1,11 +1,13 @@
 import argparse
 import humanize
 import pathlib
+import sys
+import backoff
 import transmission_rpc
 from transmission_delete_unwanted import pieces
 
 
-def _parse_arguments(args=None):
+def _parse_arguments(args):
     argument_parser = argparse.ArgumentParser(
         description="Deletes unwanted files from a Transmission torrent.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -26,6 +28,14 @@ def _parse_arguments(args=None):
         default=argparse.SUPPRESS,
     )
     return argument_parser.parse_args(args)
+
+
+@backoff.on_predicate(backoff.expo, factor=0.1, max_value=1.0)
+def _wait_torrent_verify(transmission_client, torrent_id):
+    return (
+        transmission_client.get_torrent(torrent_id, arguments=["status"]).status
+        != transmission_rpc.Status.CHECKING
+    )
 
 
 def _is_dir_empty(path):
@@ -120,7 +130,17 @@ def _compute_pieces_wanted(files, files_wanted, piece_size):
     return pieces_wanted
 
 
-def _process_torrent(transmission_client, torrent_id, download_dir):
+class ScriptException(Exception):
+    pass
+
+
+class CorruptTorrentException(ScriptException):
+    pass
+
+
+def _process_torrent(
+    transmission_client, torrent_id, download_dir, run_before_check, transmission_url
+):
     torrent = transmission_client.get_torrent(
         torrent_id,
         arguments=[
@@ -139,6 +159,7 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
         f" {torrent.id})"
     )
 
+    total_piece_count = torrent.piece_count
     pieces_wanted = _compute_pieces_wanted(
         # Note we use torrent.fields["files"], not torrent.get_files(), to work around
         # https://github.com/trim21/transmission-rpc/issues/455
@@ -146,9 +167,9 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
         torrent.wanted,
         torrent.piece_size,
     )
-    assert len(pieces_wanted) == torrent.piece_count
-    pieces_present = pieces.to_array(torrent.pieces, torrent.piece_count)
-    assert len(pieces_present) == torrent.piece_count
+    assert len(pieces_wanted) == total_piece_count
+    pieces_present = pieces.to_array(torrent.pieces, total_piece_count)
+    assert len(pieces_present) == total_piece_count
 
     pieces_wanted_present = list(
         zip(
@@ -236,14 +257,51 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
 
         current_offset = next_offset
 
+    run_before_check()
 
-def main(args=None):
+    print("All done, kicking off torrent verification. This may take a while...")
+    transmission_client.verify_torrent(torrent.id)
+    _wait_torrent_verify(transmission_client, torrent_id)
+    torrent = transmission_client.get_torrent(torrent.id, arguments=["pieces"])
+    lost_pieces_count = sum(
+        piece_present_wanted_previously and not piece_present_now
+        for piece_present_wanted_previously, piece_present_now in zip(
+            pieces_present_wanted,
+            pieces.to_array(torrent.pieces, total_piece_count),
+            strict=True,
+        )
+    )
+    if lost_pieces_count > 0:
+        raise CorruptTorrentException(
+            "Oh no, looks like we corrupted"
+            f" {_format_piece_count(lost_pieces_count)} that were previously valid and"
+            " wanted :( This should never happen, please report this as a bug (make"
+            " sure to attach the output of `transmission-remote"
+            f" {transmission_url} --torrent {torrent.id} --info --info-files"
+            " --info-pieces`)"
+        )
+    print("Torrent verification successful.")
+
+
+def run(args, run_before_check=lambda: None):
     args = _parse_arguments(args)
-    with transmission_rpc.from_url(args.transmission_url) as transmission_client:
+    transmission_url = args.transmission_url
+    with transmission_rpc.from_url(transmission_url) as transmission_client:
         download_dir = pathlib.Path(transmission_client.get_session().download_dir)
         torrent_id = args.torrent_id
         _process_torrent(
             transmission_client=transmission_client,
             torrent_id=torrent_id if len(torrent_id) == 40 else int(torrent_id),
             download_dir=download_dir,
+            run_before_check=run_before_check,
+            transmission_url=transmission_url,
         )
+
+
+def main():
+    try:
+        run(args=None)
+    except ScriptException as script_exception:
+        print(f"FATAL ERROR: {script_exception.args[0]}", file=sys.stderr)
+        return 1
+    return 0
