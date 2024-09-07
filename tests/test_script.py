@@ -942,3 +942,42 @@ def test_stays_stopped(
 
     transmission_delete_unwanted_torrent(torrent, run_before_check=check_stopped)
     check_stopped()
+
+
+def test_verify_on_error(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    transmission_client,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
+            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 2
+    assert_torrent_status(torrent.transmission.id)
+
+    class TestException(Exception):
+        pass
+
+    def raise_test_exception():
+        raise TestException()
+
+    with pytest.raises(TestException):
+        transmission_delete_unwanted_torrent(
+            torrent, run_before_check=raise_test_exception
+        )
+    run_verify_torrent(torrent.transmission.id, request=False)
+    transmission_info = transmission_client.get_torrent(
+        torrent.transmission.id, arguments=["status", "pieces"]
+    )
+    assert transmission_info.status == transmission_rpc.Status.STOPPED
+    # The script should have kicked off verification despite the error, so Transmission
+    # should have noticed the piece is gone.
+    assert transmission_delete_unwanted.pieces.to_array(
+        transmission_info.pieces, piece_count=2
+    ) == [True, False]

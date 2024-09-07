@@ -226,58 +226,70 @@ def _process_torrent(
             lambda status: status == transmission_rpc.Status.STOPPED,
         )
 
-    current_offset = 0
-    for file, file_wanted in zip(torrent.fields["files"], torrent.wanted):
-        file_length = file["length"]
-        begin_piece = current_offset // piece_size
-        end_piece = -(-(current_offset + file_length) // piece_size)
-        next_offset = current_offset + file_length
+    try:
+        current_offset = 0
+        for file, file_wanted in zip(torrent.fields["files"], torrent.wanted):
+            file_length = file["length"]
+            begin_piece = current_offset // piece_size
+            end_piece = -(-(current_offset + file_length) // piece_size)
+            next_offset = current_offset + file_length
 
-        if any(pieces_present_unwanted[begin_piece:end_piece]):
-            assert not file_wanted
-            if any(pieces_present_wanted[begin_piece:end_piece]):
-                # The file is not wanted, but it contains valid pieces that are wanted.
-                # In practice this means the file contains pieces that overlap with
-                # wanted, adjacent files. We can't get rid of the file without
-                # corrupting these pieces; best we can do is turn it into a partial
-                # file.
+            if any(pieces_present_unwanted[begin_piece:end_piece]):
+                assert not file_wanted
+                if any(pieces_present_wanted[begin_piece:end_piece]):
+                    # The file is not wanted, but it contains valid pieces that are wanted.
+                    # In practice this means the file contains pieces that overlap with
+                    # wanted, adjacent files. We can't get rid of the file without
+                    # corrupting these pieces; best we can do is turn it into a partial
+                    # file.
 
-                # Sanity check that the wanted pieces are where we expect them to be.
-                assert (
-                    current_offset % piece_size != 0 or not pieces_wanted[begin_piece]
-                )
-                assert next_offset % piece_size != 0 or not pieces_wanted[end_piece - 1]
-                assert not any(pieces_wanted[begin_piece + 1 : end_piece - 1])
+                    # Sanity check that the wanted pieces are where we expect them to be.
+                    assert (
+                        current_offset % piece_size != 0
+                        or not pieces_wanted[begin_piece]
+                    )
+                    assert (
+                        next_offset % piece_size != 0
+                        or not pieces_wanted[end_piece - 1]
+                    )
+                    assert not any(pieces_wanted[begin_piece + 1 : end_piece - 1])
 
-                keep_first_bytes = (
-                    (begin_piece + 1) * piece_size - current_offset
-                    if pieces_present_wanted[begin_piece]
-                    else 0
-                )
-                assert 0 <= keep_first_bytes < piece_size
-                keep_last_bytes = (
-                    piece_size - (end_piece * piece_size - next_offset)
-                    if pieces_present_wanted[end_piece - 1]
-                    else piece_size
-                )
-                assert 0 < keep_last_bytes <= piece_size
-                keep_last_bytes %= piece_size
-                assert keep_first_bytes > 0 or keep_last_bytes > 0
-                assert (keep_first_bytes + keep_last_bytes) < file_length
-                _trim_torrent_file(
-                    download_dir,
-                    file["name"],
-                    keep_first_bytes=keep_first_bytes,
-                    keep_last_bytes=keep_last_bytes,
-                )
-            else:
-                # The file does not contain any data from wanted, valid pieces; we can
-                # safely get rid of it.
-                _remove_torrent_file(download_dir, file["name"])
+                    keep_first_bytes = (
+                        (begin_piece + 1) * piece_size - current_offset
+                        if pieces_present_wanted[begin_piece]
+                        else 0
+                    )
+                    assert 0 <= keep_first_bytes < piece_size
+                    keep_last_bytes = (
+                        piece_size - (end_piece * piece_size - next_offset)
+                        if pieces_present_wanted[end_piece - 1]
+                        else piece_size
+                    )
+                    assert 0 < keep_last_bytes <= piece_size
+                    keep_last_bytes %= piece_size
+                    assert keep_first_bytes > 0 or keep_last_bytes > 0
+                    assert (keep_first_bytes + keep_last_bytes) < file_length
+                    _trim_torrent_file(
+                        download_dir,
+                        file["name"],
+                        keep_first_bytes=keep_first_bytes,
+                        keep_last_bytes=keep_last_bytes,
+                    )
+                else:
+                    # The file does not contain any data from wanted, valid pieces; we can
+                    # safely get rid of it.
+                    _remove_torrent_file(download_dir, file["name"])
 
-        current_offset = next_offset
+            current_offset = next_offset
 
-    run_before_check()
+        run_before_check()
+    except:
+        # If we are interrupted while touching torrent data, before we bail at least try
+        # to kick off a verification so that Transmission is aware that data may have
+        # changed. Otherwise the risk is the user may just resume the torrent and start
+        # serving corrupt pieces.
+        transmission_client.verify_torrent(torrent_id)
+        raise
 
     print("All done, kicking off torrent verification. This may take a while...")
     transmission_client.verify_torrent(torrent_id)
