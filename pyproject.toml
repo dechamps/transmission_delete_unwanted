@@ -52,4 +52,6 @@ disable = [
 testpaths = "tests"
 addopts = [
     "--import-mode=importlib",
+    "--numprocesses=auto",
+    "--dist=worksteal",
 ]
