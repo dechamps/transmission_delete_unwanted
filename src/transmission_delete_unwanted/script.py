@@ -14,9 +14,8 @@ def _parse_arguments(args):
     )
     argument_parser.add_argument(
         "--transmission-url",
-        help="Transmission URL, e.g. http://localhost:9091",
-        required=False,
-        default=argparse.SUPPRESS,
+        help="URL of the Transmission instance to connect to",
+        default="http://127.0.0.1:9091",
     )
     argument_parser.add_argument(
         "--torrent-id",
