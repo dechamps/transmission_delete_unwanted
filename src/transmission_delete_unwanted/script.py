@@ -9,7 +9,7 @@ from transmission_delete_unwanted import pieces
 
 def _parse_arguments(args):
     argument_parser = argparse.ArgumentParser(
-        description="Deletes unwanted files from a Transmission torrent.",
+        description="Deletes/trims unwanted files from a Transmission torrent.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     argument_parser.add_argument(
