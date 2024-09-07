@@ -32,9 +32,11 @@ def _parse_arguments(args):
 
 @backoff.on_predicate(backoff.expo, factor=0.1, max_value=1.0)
 def _wait_torrent_verify(transmission_client, torrent_id):
-    return (
-        transmission_client.get_torrent(torrent_id, arguments=["status"]).status
-        != transmission_rpc.Status.CHECKING
+    return transmission_client.get_torrent(
+        torrent_id, arguments=["status"]
+    ).status not in (
+        transmission_rpc.Status.CHECK_PENDING,
+        transmission_rpc.Status.CHECKING,
     )
 
 
