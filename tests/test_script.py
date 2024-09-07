@@ -878,3 +878,67 @@ def test_verify(
 
     with pytest.raises(transmission_delete_unwanted.script.CorruptTorrentException):
         transmission_delete_unwanted_torrent(torrent, run_before_check=_before_check)
+
+
+def test_stop(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    transmission_client,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
+            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert_torrent_status(torrent.transmission.id)
+
+    def check_stopped():
+        assert (
+            transmission_client.get_torrent(
+                torrent.transmission.id, arguments=["status"]
+            ).status
+            == transmission_rpc.Status.STOPPED
+        )
+
+    transmission_delete_unwanted_torrent(torrent, run_before_check=check_stopped)
+    assert_torrent_status(
+        torrent.transmission.id,
+        expect_pieces=[True, False],
+    )
+
+
+def test_stays_stopped(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    transmission_client,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
+            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert_torrent_status(torrent.transmission.id)
+
+    transmission_client.stop_torrent(torrent.transmission.id)
+
+    def is_stopped():
+        return (
+            transmission_client.get_torrent(
+                torrent.transmission.id, arguments=["status"]
+            ).status
+            == transmission_rpc.Status.STOPPED
+        )
+
+    _poll_until(is_stopped)
+
+    def check_stopped():
+        assert is_stopped()
+
+    transmission_delete_unwanted_torrent(torrent, run_before_check=check_stopped)
+    check_stopped()

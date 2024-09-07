@@ -30,14 +30,15 @@ def _parse_arguments(args):
     return argument_parser.parse_args(args)
 
 
-@backoff.on_predicate(backoff.expo, factor=0.1, max_value=1.0)
-def _wait_torrent_verify(transmission_client, torrent_id):
-    return transmission_client.get_torrent(
-        torrent_id, arguments=["status"]
-    ).status not in (
-        transmission_rpc.Status.CHECK_PENDING,
-        transmission_rpc.Status.CHECKING,
-    )
+@backoff.on_predicate(
+    backoff.expo,
+    lambda status: status is None,
+    factor=0.050,
+    max_value=1.0,
+)
+def _wait_for_torrent_status(transmission_client, torrent_id, status_predicate):
+    status = transmission_client.get_torrent(torrent_id, arguments=["status"]).status
+    return status if status_predicate(status) else None
 
 
 def _is_dir_empty(path):
@@ -154,11 +155,13 @@ def _process_torrent(
             "pieceCount",
             "pieceSize",
             "wanted",
+            "status",
         ],
     )
+    torrent_id = torrent.id
     print(
         f'>>> PROCESSING TORRENT: "{torrent.name}" (hash: {torrent.info_hash} id:'
-        f" {torrent.id})"
+        f" {torrent_id})"
     )
 
     total_piece_count = torrent.piece_count
@@ -207,6 +210,21 @@ def _process_torrent(
     if pieces_present_unwanted_count == 0:
         print("Every downloaded piece is wanted. Nothing to do.")
         return
+
+    initially_stopped = torrent.status == transmission_rpc.Status.STOPPED
+    if not initially_stopped:
+        # Stop the torrent before we make any changes. We don't want to risk
+        # Transmission serving deleted pieces that it thinks are still there. It is only
+        # safe to resume the torrent after a completed verification (hash check).
+        transmission_client.stop_torrent(torrent_id)
+        # Transmission does not stop torrents synchronously, so wait for the torrent to
+        # transition to the stopped state. Hopefully Transmission will not attempt to
+        # read from the torrent files after that point.
+        _wait_for_torrent_status(
+            transmission_client,
+            torrent_id,
+            lambda status: status == transmission_rpc.Status.STOPPED,
+        )
 
     current_offset = 0
     for file, file_wanted in zip(torrent.fields["files"], torrent.wanted):
@@ -262,9 +280,18 @@ def _process_torrent(
     run_before_check()
 
     print("All done, kicking off torrent verification. This may take a while...")
-    transmission_client.verify_torrent(torrent.id)
-    _wait_torrent_verify(transmission_client, torrent_id)
-    torrent = transmission_client.get_torrent(torrent.id, arguments=["pieces"])
+    transmission_client.verify_torrent(torrent_id)
+    status = _wait_for_torrent_status(
+        transmission_client,
+        torrent_id,
+        lambda status: status
+        not in (
+            transmission_rpc.Status.CHECKING,
+            transmission_rpc.Status.CHECK_PENDING,
+        ),
+    )
+    assert status == transmission_rpc.Status.STOPPED
+    torrent = transmission_client.get_torrent(torrent_id, arguments=["pieces"])
     lost_pieces_count = sum(
         piece_present_wanted_previously and not piece_present_now
         for piece_present_wanted_previously, piece_present_now in zip(
@@ -283,6 +310,9 @@ def _process_torrent(
             " --info-pieces`)"
         )
     print("Torrent verification successful.")
+
+    if not initially_stopped:
+        transmission_client.start_torrent(torrent_id)
 
 
 def run(args, run_before_check=lambda: None):
