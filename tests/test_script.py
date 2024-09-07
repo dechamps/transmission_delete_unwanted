@@ -239,6 +239,7 @@ def _fixture_transmission_delete_unwanted_torrent(
             _TorrentIdKind.TRANSMISSION_ID: str(torrent.transmission.id),
             _TorrentIdKind.HASH: torrent.torf.infohash,
         }[request.param],
+        *kargs,
         **kwargs,
     )
 
@@ -512,6 +513,27 @@ def test_delete_aligned(
     )
 
 
+def test_delete_dryrun(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
+            "test2.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 3
+    assert_torrent_status(torrent.transmission.id)
+    transmission_delete_unwanted_torrent(torrent, "--dry-run")
+    run_verify_torrent(torrent.transmission.id)
+    assert_torrent_status(torrent.transmission.id)
+
+
 def test_delete_aligned_incomplete(
     transmission_delete_unwanted_torrent,
     setup_torrent,
@@ -591,6 +613,28 @@ def test_trim_beginaligned(
         torrent.transmission.id,
         expect_pieces=[False, True],
     )
+
+
+def test_trim_dryrun(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    run_verify_torrent,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(
+                random.randbytes(_MIN_PIECE_SIZE + 1), wanted=False
+            ),
+            "test1.txt": TorrentFile(random.randbytes(1)),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert torrent.torf.pieces == 2
+    assert_torrent_status(torrent.transmission.id)
+    transmission_delete_unwanted_torrent(torrent, "--dry-run")
+    run_verify_torrent(torrent.transmission.id)
+    assert_torrent_status(torrent.transmission.id)
 
 
 @pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
@@ -897,10 +941,35 @@ def test_verify(
 
     def _before_check():
         with open(torrent.path / "test0.txt", "wb") as file:
-            file.write(b"x")
+            file.write(b"x" * _MIN_PIECE_SIZE)
 
     with pytest.raises(transmission_delete_unwanted.script.CorruptTorrentException):
         transmission_delete_unwanted_torrent(torrent, run_before_check=_before_check)
+
+
+def test_verify_dryrun(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert_torrent_status(torrent.transmission.id)
+
+    def _before_check():
+        with open(torrent.path / "test0.txt", "wb") as file:
+            file.write(b"x" * _MIN_PIECE_SIZE)
+
+    transmission_delete_unwanted_torrent(
+        torrent, "--dry-run", run_before_check=_before_check
+    )
+
+    assert_torrent_status(torrent.transmission.id)
 
 
 def test_stop(
@@ -933,11 +1002,44 @@ def test_stop(
     )
 
 
+def test_stop_dryrun(
+    transmission_delete_unwanted_torrent,
+    setup_torrent,
+    assert_torrent_status,
+    transmission_client,
+):
+    torrent = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert_torrent_status(torrent.transmission.id)
+
+    def check_not_stopped():
+        assert (
+            transmission_client.get_torrent(
+                torrent.transmission.id, arguments=["status"]
+            ).status
+            != transmission_rpc.Status.STOPPED
+        )
+
+    transmission_delete_unwanted_torrent(
+        torrent, "--dry-run", run_before_check=check_not_stopped
+    )
+
+
+@pytest.mark.parametrize(
+    "dry_run",
+    [False, True],
+)
 def test_stays_stopped(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
     transmission_client,
+    dry_run,
 ):
     torrent = setup_torrent(
         files={
@@ -963,7 +1065,9 @@ def test_stays_stopped(
     def check_stopped():
         assert is_stopped()
 
-    transmission_delete_unwanted_torrent(torrent, run_before_check=check_stopped)
+    transmission_delete_unwanted_torrent(
+        torrent, *["--dry-run"] if dry_run else [], run_before_check=check_stopped
+    )
     check_stopped()
 
 

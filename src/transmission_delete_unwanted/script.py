@@ -27,6 +27,15 @@ def _parse_arguments(args):
         required=True,
         default=argparse.SUPPRESS,
     )
+    argument_parser.add_argument(
+        "--dry-run",
+        help=(
+            "Do not touch anything or make any changes; instead, just state what would"
+            " have been done"
+        ),
+        action="store_true",
+        default=argparse.SUPPRESS,
+    )
     return argument_parser.parse_args(args)
 
 
@@ -47,37 +56,38 @@ def _is_dir_empty(path):
     return True
 
 
-def _remove_torrent_file(download_dir, file_name):
-    removed = False
-
-    file_path = download_dir / file_name
-    if file_path.exists():
-        print(f"Removing: {file_name}")
-        file_path.unlink()
-        removed = True
+def _remove_torrent_file(download_dir, file_name, dry_run):
+    def delete(file_name_to_delete):
+        file_path = download_dir / file_name_to_delete
+        if not file_path.exists():
+            return False
+        print(
+            f"{'Would have removed' if dry_run else 'Removing'}: {file_name_to_delete}"
+        )
+        if not dry_run:
+            file_path.unlink()
+        return True
 
     # Note: in the very unlikely scenario that a torrent contains a file named
     # "xxx" *and* another file named "xxx.part", this may end up deleting the
     # wrong file. For now we just accept the risk.
-    part_file_name = f"{file_name}.part"
-    part_file_path = download_dir / part_file_name
-    if part_file_path.exists():
-        print(f"Removing: {part_file_name}")
-        part_file_path.unlink()
-        removed = True
-
-    if not removed:
+    if not any([delete(file_name), delete(f"{file_name}.part")]):
         print(f"WARNING: could not find {file_name} to delete")
         return
 
-    parent_dir = file_path.parent
-    while _is_dir_empty(parent_dir):
-        parent_dir.rmdir()
-        parent_dir = parent_dir.parent
+    if not dry_run:
+        parent_dir = (download_dir / file_name).parent
+        while _is_dir_empty(parent_dir):
+            parent_dir.rmdir()
+            parent_dir = parent_dir.parent
 
 
-def _trim_torrent_file(download_dir, file_name, keep_first_bytes, keep_last_bytes):
-    print(f"Trimming: {file_name}")
+def _trim_torrent_file(
+    download_dir, file_name, keep_first_bytes, keep_last_bytes, dry_run
+):
+    print(f"{'Would have trimmed' if dry_run else 'Trimming'}: {file_name}")
+    if dry_run:
+        return
 
     # Note: on some operating systems there are ways to do this in-place without any
     # copies ("hole punching"), e.g. fallocate(FALLOC_FL_PUNCH_HOLE) on Linux. This
@@ -142,7 +152,12 @@ class CorruptTorrentException(ScriptException):
 
 
 def _process_torrent(
-    transmission_client, torrent_id, download_dir, run_before_check, transmission_url
+    transmission_client,
+    torrent_id,
+    download_dir,
+    run_before_check,
+    transmission_url,
+    dry_run,
 ):
     torrent = transmission_client.get_torrent(
         torrent_id,
@@ -212,7 +227,7 @@ def _process_torrent(
         return
 
     initially_stopped = torrent.status == transmission_rpc.Status.STOPPED
-    if not initially_stopped:
+    if not initially_stopped and not dry_run:
         # Stop the torrent before we make any changes. We don't want to risk
         # Transmission serving deleted pieces that it thinks are still there. It is only
         # safe to resume the torrent after a completed verification (hash check).
@@ -274,11 +289,12 @@ def _process_torrent(
                         file["name"],
                         keep_first_bytes=keep_first_bytes,
                         keep_last_bytes=keep_last_bytes,
+                        dry_run=dry_run,
                     )
                 else:
                     # The file does not contain any data from wanted, valid pieces; we can
                     # safely get rid of it.
-                    _remove_torrent_file(download_dir, file["name"])
+                    _remove_torrent_file(download_dir, file["name"], dry_run=dry_run)
 
             current_offset = next_offset
 
@@ -288,42 +304,44 @@ def _process_torrent(
         # to kick off a verification so that Transmission is aware that data may have
         # changed. Otherwise the risk is the user may just resume the torrent and start
         # serving corrupt pieces.
-        transmission_client.verify_torrent(torrent_id)
+        if not dry_run:
+            transmission_client.verify_torrent(torrent_id)
         raise
 
-    print("All done, kicking off torrent verification. This may take a while...")
-    transmission_client.verify_torrent(torrent_id)
-    status = _wait_for_torrent_status(
-        transmission_client,
-        torrent_id,
-        lambda status: status
-        not in (
-            transmission_rpc.Status.CHECKING,
-            transmission_rpc.Status.CHECK_PENDING,
-        ),
-    )
-    assert status == transmission_rpc.Status.STOPPED
-    torrent = transmission_client.get_torrent(torrent_id, arguments=["pieces"])
-    lost_pieces_count = sum(
-        piece_present_wanted_previously and not piece_present_now
-        for piece_present_wanted_previously, piece_present_now in zip(
-            pieces_present_wanted,
-            pieces.to_array(torrent.pieces, total_piece_count),
-            strict=True,
+    if not dry_run:
+        print("All done, kicking off torrent verification. This may take a while...")
+        transmission_client.verify_torrent(torrent_id)
+        status = _wait_for_torrent_status(
+            transmission_client,
+            torrent_id,
+            lambda status: status
+            not in (
+                transmission_rpc.Status.CHECKING,
+                transmission_rpc.Status.CHECK_PENDING,
+            ),
         )
-    )
-    if lost_pieces_count > 0:
-        raise CorruptTorrentException(
-            "Oh no, looks like we corrupted"
-            f" {_format_piece_count(lost_pieces_count)} that were previously valid and"
-            " wanted :( This should never happen, please report this as a bug (make"
-            " sure to attach the output of `transmission-remote"
-            f" {transmission_url} --torrent {torrent.id} --info --info-files"
-            " --info-pieces`)"
+        assert status == transmission_rpc.Status.STOPPED
+        torrent = transmission_client.get_torrent(torrent_id, arguments=["pieces"])
+        lost_pieces_count = sum(
+            piece_present_wanted_previously and not piece_present_now
+            for piece_present_wanted_previously, piece_present_now in zip(
+                pieces_present_wanted,
+                pieces.to_array(torrent.pieces, total_piece_count),
+                strict=True,
+            )
         )
-    print("Torrent verification successful.")
+        if lost_pieces_count > 0:
+            raise CorruptTorrentException(
+                "Oh no, looks like we corrupted"
+                f" {_format_piece_count(lost_pieces_count)} that were previously valid"
+                " and wanted :( This should never happen, please report this as a bug"
+                " (make sure to attach the output of `transmission-remote"
+                f" {transmission_url} --torrent {torrent.id} --info --info-files"
+                " --info-pieces`)"
+            )
+        print("Torrent verification successful.")
 
-    if not initially_stopped:
+    if not initially_stopped and not dry_run:
         transmission_client.start_torrent(torrent_id)
 
 
@@ -339,6 +357,7 @@ def run(args, run_before_check=lambda: None):
             download_dir=download_dir,
             run_before_check=run_before_check,
             transmission_url=transmission_url,
+            dry_run=getattr(args, "dry_run", False),
         )
 
 
