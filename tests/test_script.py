@@ -1,6 +1,7 @@
 import contextlib
 import collections
 import enum
+import random
 import socket
 import subprocess
 import pathlib
@@ -263,7 +264,7 @@ def test_noop_onefile_onepiece(
     run_verify_torrent,
 ):
     torrent = setup_torrent(
-        files={"test.txt": TorrentFile(b"0000")}, piece_size=_MIN_PIECE_SIZE
+        files={"test.txt": TorrentFile(random.randbytes(4))}, piece_size=_MIN_PIECE_SIZE
     )
     assert torrent.torf.pieces == 1
     assert_torrent_status(torrent.transmission.id)
@@ -280,9 +281,9 @@ def test_noop_multifile_onepiece(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0000"),
-            "test1.txt": TorrentFile(b"0000"),
-            "test3.txt": TorrentFile(b"0000"),
+            "test0.txt": TorrentFile(random.randbytes(4)),
+            "test1.txt": TorrentFile(random.randbytes(4)),
+            "test3.txt": TorrentFile(random.randbytes(4)),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -301,9 +302,9 @@ def test_noop_multifile_onepiece_unwanted(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0000"),
-            "test1.txt": TorrentFile(b"0000", wanted=False),
-            "test3.txt": TorrentFile(b"0000"),
+            "test0.txt": TorrentFile(random.randbytes(4)),
+            "test1.txt": TorrentFile(random.randbytes(4), wanted=False),
+            "test3.txt": TorrentFile(random.randbytes(4)),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -321,7 +322,7 @@ def test_noop_onefile_multipiece(
     run_verify_torrent,
 ):
     torrent = setup_torrent(
-        files={"test.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE * 4)},
+        files={"test.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE * 4))},
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 4
@@ -339,9 +340,9 @@ def test_noop_multifile_multipiece_aligned(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE),
-            "test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test2.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -360,9 +361,9 @@ def test_noop_multifile_multipiece_aligned_incomplete(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE),
-            "test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test2.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
         },
         piece_size=_MIN_PIECE_SIZE,
         before_add=lambda path: (path / "test1.txt").unlink(),
@@ -390,9 +391,9 @@ def test_noop_multifile_multipiece_aligned_incomplete_unwanted(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
-            "test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
+            "test2.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
         },
         piece_size=_MIN_PIECE_SIZE,
         before_add=lambda path: (path / "test1.txt").unlink(),
@@ -422,9 +423,9 @@ def test_noop_multifile_multipiece_unaligned_incomplete(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"x" * (_MIN_PIECE_SIZE + shift_bytes)),
-            "test1.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE),
-            "test2.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE),
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE + shift_bytes)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test2.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
         },
         piece_size=_MIN_PIECE_SIZE,
         before_add=lambda path: (path / "test1.txt").unlink(),
@@ -454,9 +455,9 @@ def test_noop_multifile_multipiece_unaligned_incomplete_unwanted(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"x" * (_MIN_PIECE_SIZE + shift_bytes)),
-            "test1.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE, wanted=False),
-            "test2.txt": TorrentFile(b"x" * _MIN_PIECE_SIZE),
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE + shift_bytes)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
+            "test2.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
         },
         piece_size=_MIN_PIECE_SIZE,
         before_add=lambda path: (path / "test1.txt").unlink(),
@@ -484,11 +485,13 @@ def test_delete_aligned(
     assert_torrent_status,
     run_verify_torrent,
 ):
+    test0contents = random.randbytes(_MIN_PIECE_SIZE)
+    test2contents = random.randbytes(_MIN_PIECE_SIZE)
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
-            "test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+            "test0.txt": TorrentFile(test0contents),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
+            "test2.txt": TorrentFile(test2contents),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -498,8 +501,8 @@ def test_delete_aligned(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "test0.txt": b"0" * _MIN_PIECE_SIZE,
-            torrent.path / "test2.txt": b"2" * _MIN_PIECE_SIZE,
+            torrent.path / "test0.txt": test0contents,
+            torrent.path / "test2.txt": test2contents,
         },
     )
     run_verify_torrent(torrent.transmission.id)
@@ -520,11 +523,15 @@ def test_delete_aligned_incomplete(
             file.seek(_MIN_PIECE_SIZE)
             file.write(b"x" * _MIN_PIECE_SIZE)
 
+    test0contents = random.randbytes(_MIN_PIECE_SIZE)
+    test2contents = random.randbytes(_MIN_PIECE_SIZE)
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE * 3, wanted=False),
-            "test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+            "test0.txt": TorrentFile(test0contents),
+            "test1.txt": TorrentFile(
+                random.randbytes(_MIN_PIECE_SIZE * 3), wanted=False
+            ),
+            "test2.txt": TorrentFile(test2contents),
         },
         piece_size=_MIN_PIECE_SIZE,
         before_add=_corrupt_middle_piece,
@@ -538,8 +545,8 @@ def test_delete_aligned_incomplete(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "test0.txt": b"0" * _MIN_PIECE_SIZE,
-            torrent.path / "test2.txt": b"2" * _MIN_PIECE_SIZE,
+            torrent.path / "test0.txt": test0contents,
+            torrent.path / "test2.txt": test2contents,
         },
     )
     run_verify_torrent(torrent.transmission.id)
@@ -557,12 +564,12 @@ def test_trim_beginaligned(
     run_verify_torrent,
     shift_bytes,
 ):
+    test0contents = random.randbytes(_MIN_PIECE_SIZE + shift_bytes)
+    test1contents = random.randbytes(1)
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(
-                b"0" * (_MIN_PIECE_SIZE + shift_bytes), wanted=False
-            ),
-            "test1.txt": TorrentFile(b"1"),
+            "test0.txt": TorrentFile(test0contents, wanted=False),
+            "test1.txt": TorrentFile(test1contents),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -573,8 +580,10 @@ def test_trim_beginaligned(
         torrent.path,
         {
             torrent.path
-            / "test0.txt.part": b"\x00" * _MIN_PIECE_SIZE + b"0" * shift_bytes,
-            torrent.path / "test1.txt": b"1",
+            / "test0.txt.part": (
+                b"\x00" * _MIN_PIECE_SIZE + test0contents[-shift_bytes:]
+            ),
+            torrent.path / "test1.txt": test1contents,
         },
     )
     run_verify_torrent(torrent.transmission.id)
@@ -592,12 +601,12 @@ def test_trim_endaligned(
     run_verify_torrent,
     shift_bytes,
 ):
+    test0contents = random.randbytes(_MIN_PIECE_SIZE - shift_bytes)
+    test1contents = random.randbytes(_MIN_PIECE_SIZE + shift_bytes)
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE - shift_bytes)),
-            "test1.txt": TorrentFile(
-                b"1" * (_MIN_PIECE_SIZE + shift_bytes), wanted=False
-            ),
+            "test0.txt": TorrentFile(test0contents),
+            "test1.txt": TorrentFile(test1contents, wanted=False),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -607,8 +616,8 @@ def test_trim_endaligned(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "test0.txt": b"0" * (_MIN_PIECE_SIZE - shift_bytes),
-            torrent.path / "test1.txt.part": b"1" * shift_bytes,
+            torrent.path / "test0.txt": test0contents,
+            torrent.path / "test1.txt.part": test1contents[:shift_bytes],
         },
     )
     run_verify_torrent(torrent.transmission.id)
@@ -628,14 +637,16 @@ def test_trim_unaligned(
     left_shift_bytes,
     right_shift_bytes,
 ):
+    test0contents = random.randbytes(_MIN_PIECE_SIZE + left_shift_bytes)
+    test1contents = random.randbytes(
+        _MIN_PIECE_SIZE * 3 - left_shift_bytes - right_shift_bytes
+    )
+    test2contents = random.randbytes(_MIN_PIECE_SIZE + right_shift_bytes)
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE + left_shift_bytes)),
-            "test1.txt": TorrentFile(
-                b"1" * (_MIN_PIECE_SIZE * 3 - left_shift_bytes - right_shift_bytes),
-                wanted=False,
-            ),
-            "test2.txt": TorrentFile(b"2" * (_MIN_PIECE_SIZE + right_shift_bytes)),
+            "test0.txt": TorrentFile(test0contents),
+            "test1.txt": TorrentFile(test1contents, wanted=False),
+            "test2.txt": TorrentFile(test2contents),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -645,14 +656,14 @@ def test_trim_unaligned(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "test0.txt": b"0" * (_MIN_PIECE_SIZE + left_shift_bytes),
+            torrent.path / "test0.txt": test0contents,
             torrent.path
             / "test1.txt.part": (
-                b"1" * (_MIN_PIECE_SIZE - left_shift_bytes)
+                test1contents[: _MIN_PIECE_SIZE - left_shift_bytes]
                 + b"\x00" * _MIN_PIECE_SIZE
-                + b"1" * (_MIN_PIECE_SIZE - right_shift_bytes)
+                + test1contents[-(_MIN_PIECE_SIZE - right_shift_bytes) :]
             ),
-            torrent.path / "test2.txt": b"2" * (_MIN_PIECE_SIZE + right_shift_bytes),
+            torrent.path / "test2.txt": test2contents,
         },
     )
     run_verify_torrent(torrent.transmission.id)
@@ -681,19 +692,22 @@ def test_trim_unaligned_incomplete(
     def _corrupt_pieces(path):
         with open(path / "test1.txt", "r+b") as file:
             if incomplete_first_piece:
-                file.write(b"x")
+                file.write(b"x" * (_MIN_PIECE_SIZE // 4))
             if incomplete_last_piece:
                 file.seek(_MIN_PIECE_SIZE * 2)
-                file.write(b"x")
+                file.write(b"x" * (_MIN_PIECE_SIZE // 4))
+
+    test0contents = random.randbytes(_MIN_PIECE_SIZE + left_shift_bytes)
+    test1contents = random.randbytes(
+        _MIN_PIECE_SIZE * 3 - left_shift_bytes - right_shift_bytes
+    )
+    test2contents = random.randbytes(_MIN_PIECE_SIZE + right_shift_bytes)
 
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * (_MIN_PIECE_SIZE + left_shift_bytes)),
-            "test1.txt": TorrentFile(
-                b"1" * (_MIN_PIECE_SIZE * 3 - left_shift_bytes - right_shift_bytes),
-                wanted=False,
-            ),
-            "test2.txt": TorrentFile(b"2" * (_MIN_PIECE_SIZE + right_shift_bytes)),
+            "test0.txt": TorrentFile(test0contents),
+            "test1.txt": TorrentFile(test1contents, wanted=False),
+            "test2.txt": TorrentFile(test2contents),
         },
         piece_size=_MIN_PIECE_SIZE,
         before_add=_corrupt_pieces,
@@ -715,9 +729,8 @@ def test_trim_unaligned_incomplete(
         torrent.path,
         (
             {
-                torrent.path / "test0.txt": b"0" * (_MIN_PIECE_SIZE + left_shift_bytes),
-                torrent.path
-                / "test2.txt": b"2" * (_MIN_PIECE_SIZE + right_shift_bytes),
+                torrent.path / "test0.txt": test0contents,
+                torrent.path / "test2.txt": test2contents,
             }
             | (
                 # Given the middle piece is unwanted, if both the first piece and the
@@ -729,13 +742,15 @@ def test_trim_unaligned_incomplete(
                     # Otherwise, we should only find data for the valid, wanted pieces.
                     torrent.path
                     / "test1.txt.part": (
-                        b"\x00" if incomplete_first_piece else b"1"
-                    ) * (_MIN_PIECE_SIZE - left_shift_bytes) + (
+                        b"\x00" * (_MIN_PIECE_SIZE - left_shift_bytes)
+                        if incomplete_first_piece
+                        else test1contents[: _MIN_PIECE_SIZE - left_shift_bytes]
+                    ) + (
                         b""
                         if incomplete_last_piece
                         else (
                             b"\x00" * _MIN_PIECE_SIZE
-                            + b"1" * (_MIN_PIECE_SIZE - right_shift_bytes)
+                            + test1contents[-(_MIN_PIECE_SIZE - right_shift_bytes) :]
                         )
                     )
                 }
@@ -762,11 +777,15 @@ def test_delete_directory(
     assert_torrent_status,
     run_verify_torrent,
 ):
+    test0contents = random.randbytes(_MIN_PIECE_SIZE)
+    test2contents = random.randbytes(_MIN_PIECE_SIZE)
     torrent = setup_torrent(
         files={
-            "subdir0/test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "subdir1/test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
-            "subdir2/test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+            "subdir0/test0.txt": TorrentFile(test0contents),
+            "subdir1/test1.txt": TorrentFile(
+                random.randbytes(_MIN_PIECE_SIZE), wanted=False
+            ),
+            "subdir2/test2.txt": TorrentFile(test2contents),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -778,8 +797,8 @@ def test_delete_directory(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "subdir0/test0.txt": b"0" * _MIN_PIECE_SIZE,
-            torrent.path / "subdir2/test2.txt": b"2" * _MIN_PIECE_SIZE,
+            torrent.path / "subdir0/test0.txt": test0contents,
+            torrent.path / "subdir2/test2.txt": test2contents,
         },
     )
     assert not directory_to_delete.exists()
@@ -796,13 +815,15 @@ def test_delete_directories(
     assert_torrent_status,
     run_verify_torrent,
 ):
+    test0contents = random.randbytes(_MIN_PIECE_SIZE)
+    test2contents = random.randbytes(_MIN_PIECE_SIZE)
     torrent = setup_torrent(
         files={
-            "subdir0/subsubdir0/test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
+            "subdir0/subsubdir0/test0.txt": TorrentFile(test0contents),
             "subdir1/subsubdir1/test1.txt": TorrentFile(
-                b"1" * _MIN_PIECE_SIZE, wanted=False
+                random.randbytes(_MIN_PIECE_SIZE), wanted=False
             ),
-            "subdir2/subsubdir2/test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+            "subdir2/subsubdir2/test2.txt": TorrentFile(test2contents),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -814,8 +835,8 @@ def test_delete_directories(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "subdir0/subsubdir0/test0.txt": b"0" * _MIN_PIECE_SIZE,
-            torrent.path / "subdir2/subsubdir2/test2.txt": b"2" * _MIN_PIECE_SIZE,
+            torrent.path / "subdir0/subsubdir0/test0.txt": test0contents,
+            torrent.path / "subdir2/subsubdir2/test2.txt": test2contents,
         },
     )
     assert not directory_to_delete.exists()
@@ -832,11 +853,13 @@ def test_delete_part(
     assert_torrent_status,
     run_verify_torrent,
 ):
+    test0contents = random.randbytes(_MIN_PIECE_SIZE)
+    test2contents = random.randbytes(_MIN_PIECE_SIZE)
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
-            "test2.txt": TorrentFile(b"2" * _MIN_PIECE_SIZE),
+            "test0.txt": TorrentFile(test0contents),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
+            "test2.txt": TorrentFile(test2contents),
         },
         piece_size=_MIN_PIECE_SIZE,
         before_add=lambda path: (path / "test1.txt").rename(path / "test1.txt.part"),
@@ -847,8 +870,8 @@ def test_delete_part(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "test0.txt": b"0" * _MIN_PIECE_SIZE,
-            torrent.path / "test2.txt": b"2" * _MIN_PIECE_SIZE,
+            torrent.path / "test0.txt": test0contents,
+            torrent.path / "test2.txt": test2contents,
         },
     )
     run_verify_torrent(torrent.transmission.id)
@@ -865,8 +888,8 @@ def test_verify(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -888,8 +911,8 @@ def test_stop(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -918,8 +941,8 @@ def test_stays_stopped(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
@@ -953,8 +976,8 @@ def test_verify_on_error(
 ):
     torrent = setup_torrent(
         files={
-            "test0.txt": TorrentFile(b"0" * _MIN_PIECE_SIZE),
-            "test1.txt": TorrentFile(b"1" * _MIN_PIECE_SIZE, wanted=False),
+            "test0.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE)),
+            "test1.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
         },
         piece_size=_MIN_PIECE_SIZE,
     )
