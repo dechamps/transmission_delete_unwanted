@@ -549,7 +549,7 @@ def test_delete_aligned_incomplete(
 
 
 @pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
-def test_partial_beginaligned(
+def test_trim_beginaligned(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
@@ -584,7 +584,7 @@ def test_partial_beginaligned(
 
 
 @pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
-def test_partial_endaligned(
+def test_trim_endaligned(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
@@ -619,7 +619,7 @@ def test_partial_endaligned(
 
 @pytest.mark.parametrize("left_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
 @pytest.mark.parametrize("right_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
-def test_partial_unaligned(
+def test_trim_unaligned(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,
@@ -667,7 +667,7 @@ def test_partial_unaligned(
     "incomplete_first_piece,incomplete_last_piece",
     [(True, False), (False, True), (True, True)],
 )
-def test_partial_unaligned_incomplete(
+def test_trim_unaligned_incomplete(
     transmission_delete_unwanted_torrent,
     setup_torrent,
     assert_torrent_status,

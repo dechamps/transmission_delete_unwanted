@@ -63,10 +63,8 @@ def _remove_torrent_file(download_dir, file_name):
         parent_dir = parent_dir.parent
 
 
-def _turn_torrent_file_into_partial(
-    download_dir, file_name, keep_first_bytes, keep_last_bytes
-):
-    print(f"Turning into partial: {file_name}")
+def _trim_torrent_file(download_dir, file_name, keep_first_bytes, keep_last_bytes):
+    print(f"Trimming: {file_name}")
 
     # Note: on some operating systems there are ways to do this in-place without any
     # copies ("hole punching"), e.g. fallocate(FALLOC_FL_PUNCH_HOLE) on Linux. This
@@ -214,7 +212,7 @@ def _process_torrent(transmission_client, torrent_id, download_dir):
                 keep_last_bytes %= piece_size
                 assert keep_first_bytes > 0 or keep_last_bytes > 0
                 assert (keep_first_bytes + keep_last_bytes) < file_length
-                _turn_torrent_file_into_partial(
+                _trim_torrent_file(
                     download_dir,
                     file["name"],
                     keep_first_bytes=keep_first_bytes,
