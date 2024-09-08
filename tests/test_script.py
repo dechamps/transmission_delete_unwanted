@@ -1139,3 +1139,55 @@ def test_multiple_torrents(
     verify_torrent(torrent0.transmission.id)
     verify_torrent(torrent1.transmission.id)
     verify_torrent(torrent2.transmission.id)
+
+
+def test_all_torrents(
+    run,
+    setup_torrent,
+    assert_torrent_status,
+    verify_torrent,
+):
+    test00contents = random.randbytes(_MIN_PIECE_SIZE)
+    torrent0 = setup_torrent(
+        files={
+            "test00.txt": TorrentFile(test00contents),
+            "test01.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    test11contents = random.randbytes(_MIN_PIECE_SIZE)
+    torrent1 = setup_torrent(
+        files={
+            "test10.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE), wanted=False),
+            "test11.txt": TorrentFile(test11contents),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    test20contents = random.randbytes(_MIN_PIECE_SIZE)
+    test21contents = random.randbytes(_MIN_PIECE_SIZE)
+    torrent2 = setup_torrent(
+        files={
+            "test20.txt": TorrentFile(test20contents),
+            "test21.txt": TorrentFile(test21contents),
+        },
+        piece_size=_MIN_PIECE_SIZE,
+    )
+    assert_torrent_status(torrent0.transmission.id)
+    assert_torrent_status(torrent1.transmission.id)
+    assert_torrent_status(torrent2.transmission.id)
+    run()
+    _check_file_tree(
+        torrent0.path,
+        {"test00.txt": test00contents},
+    )
+    _check_file_tree(
+        torrent1.path,
+        {"test11.txt": test11contents},
+    )
+    _check_file_tree(
+        torrent2.path,
+        {"test20.txt": test20contents, "test21.txt": test21contents},
+    )
+    verify_torrent(torrent0.transmission.id)
+    verify_torrent(torrent1.transmission.id)
+    verify_torrent(torrent2.transmission.id)
