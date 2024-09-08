@@ -160,10 +160,11 @@ class _TorrentProcessor:
                 "status",
             ],
         )
-        torrent_id = torrent.id
+        self._torrent_id = torrent.id
+        self._initially_stopped = torrent.status == transmission_rpc.Status.STOPPED
         print(
             f'>>> PROCESSING TORRENT: "{torrent.name}" (hash: {torrent.info_hash} id:'
-            f" {torrent_id})"
+            f" {self._torrent_id})"
         )
 
         total_piece_count = torrent.piece_count
@@ -209,20 +210,7 @@ class _TorrentProcessor:
             print("Every downloaded piece is wanted. Nothing to do.")
             return
 
-        initially_stopped = torrent.status == transmission_rpc.Status.STOPPED
-        if not initially_stopped and not dry_run:
-            # Stop the torrent before we make any changes. We don't want to risk
-            # Transmission serving deleted pieces that it thinks are still there. It is only
-            # safe to resume the torrent after a completed verification (hash check).
-            transmission_client.stop_torrent(torrent_id)
-            # Transmission does not stop torrents synchronously, so wait for the torrent to
-            # transition to the stopped state. Hopefully Transmission will not attempt to
-            # read from the torrent files after that point.
-            _wait_for_torrent_status(
-                transmission_client,
-                torrent_id,
-                lambda status: status == transmission_rpc.Status.STOPPED,
-            )
+        self._stop_torrent()
 
         try:
             current_offset = 0
@@ -301,8 +289,25 @@ class _TorrentProcessor:
                 piece_size=piece_size,
                 transmission_url=transmission_url,
             )
-            if not initially_stopped:
-                transmission_client.start_torrent(torrent_id)
+            if not self._initially_stopped:
+                transmission_client.start_torrent(self._torrent_id)
+
+    def _stop_torrent(self):
+        if self._initially_stopped or self._dry_run:
+            return
+
+        # Stop the torrent before we make any changes. We don't want to risk
+        # Transmission serving deleted pieces that it thinks are still there. It is only
+        # safe to resume the torrent after a completed verification (hash check).
+        self._transmission_client.stop_torrent(self._torrent_id)
+        # Transmission does not stop torrents synchronously, so wait for the torrent to
+        # transition to the stopped state. Hopefully Transmission will not attempt to
+        # read from the torrent files after that point.
+        _wait_for_torrent_status(
+            self._transmission_client,
+            self._torrent_id,
+            lambda status: status == transmission_rpc.Status.STOPPED,
+        )
 
 
 def _check_torrent(
