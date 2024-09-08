@@ -161,6 +161,7 @@ class _TorrentProcessor:
             ],
         )
         self._torrent_id = torrent.id
+        self._piece_size = torrent.piece_size
         self._initially_stopped = torrent.status == transmission_rpc.Status.STOPPED
         print(
             f'>>> PROCESSING TORRENT: "{torrent.name}" (hash: {torrent.info_hash} id:'
@@ -168,28 +169,28 @@ class _TorrentProcessor:
         )
 
         total_piece_count = torrent.piece_count
-        pieces_wanted = pieces.pieces_wanted_from_files(
+        self._pieces_wanted = pieces.pieces_wanted_from_files(
             # Note we use torrent.fields["files"], not torrent.get_files(), to work around
             # https://github.com/trim21/transmission-rpc/issues/455
             [file["length"] for file in torrent.fields["files"]],
             torrent.wanted,
             torrent.piece_size,
         )
-        assert len(pieces_wanted) == total_piece_count
+        assert len(self._pieces_wanted) == total_piece_count
         pieces_present = pieces.to_array(torrent.pieces, total_piece_count)
         assert len(pieces_present) == total_piece_count
 
         pieces_wanted_present = list(
             zip(
-                pieces_wanted,
+                self._pieces_wanted,
                 pieces_present,
                 strict=True,
             )
         )
-        pieces_present_wanted = [
+        self._pieces_present_wanted = [
             present and wanted for wanted, present in pieces_wanted_present
         ]
-        pieces_present_unwanted = [
+        self._pieces_present_unwanted = [
             present and not wanted for wanted, present in pieces_wanted_present
         ]
 
@@ -198,12 +199,12 @@ class _TorrentProcessor:
         def _format_piece_count(piece_count):
             return format_piece_count(piece_count, piece_size)
 
-        pieces_present_unwanted_count = pieces_present_unwanted.count(True)
+        pieces_present_unwanted_count = self._pieces_present_unwanted.count(True)
         print(
-            f"Wanted: {_format_piece_count(pieces_wanted.count(True))}; present:"
+            f"Wanted: {_format_piece_count(self._pieces_wanted.count(True))}; present:"
             f" {_format_piece_count(pieces_present.count(True))}; present and wanted:"
-            f" {_format_piece_count(pieces_present_wanted.count(True))}; present and"
-            f" not wanted: {_format_piece_count(pieces_present_unwanted_count)}"
+            f" {_format_piece_count(self._pieces_present_wanted.count(True))}; present"
+            f" and not wanted: {_format_piece_count(pieces_present_unwanted_count)}"
         )
 
         if pieces_present_unwanted_count == 0:
@@ -214,62 +215,14 @@ class _TorrentProcessor:
 
         try:
             current_offset = 0
-            for file, file_wanted in zip(torrent.fields["files"], torrent.wanted):
-                file_length = file["length"]
-                begin_piece = current_offset // piece_size
-                end_piece = -(-(current_offset + file_length) // piece_size)
-                next_offset = current_offset + file_length
-
-                if any(pieces_present_unwanted[begin_piece:end_piece]):
-                    assert not file_wanted
-                    if any(pieces_present_wanted[begin_piece:end_piece]):
-                        # The file is not wanted, but it contains valid pieces that are wanted.
-                        # In practice this means the file contains pieces that overlap with
-                        # wanted, adjacent files. We can't get rid of the file without
-                        # corrupting these pieces; best we can do is turn it into a partial
-                        # file.
-
-                        # Sanity check that the wanted pieces are where we expect them to be.
-                        assert (
-                            current_offset % piece_size != 0
-                            or not pieces_wanted[begin_piece]
-                        )
-                        assert (
-                            next_offset % piece_size != 0
-                            or not pieces_wanted[end_piece - 1]
-                        )
-                        assert not any(pieces_wanted[begin_piece + 1 : end_piece - 1])
-
-                        keep_first_bytes = (
-                            (begin_piece + 1) * piece_size - current_offset
-                            if pieces_present_wanted[begin_piece]
-                            else 0
-                        )
-                        assert 0 <= keep_first_bytes < piece_size
-                        keep_last_bytes = (
-                            piece_size - (end_piece * piece_size - next_offset)
-                            if pieces_present_wanted[end_piece - 1]
-                            else piece_size
-                        )
-                        assert 0 < keep_last_bytes <= piece_size
-                        keep_last_bytes %= piece_size
-                        assert keep_first_bytes > 0 or keep_last_bytes > 0
-                        assert (keep_first_bytes + keep_last_bytes) < file_length
-                        _trim_torrent_file(
-                            download_dir,
-                            file["name"],
-                            keep_first_bytes=keep_first_bytes,
-                            keep_last_bytes=keep_last_bytes,
-                            dry_run=dry_run,
-                        )
-                    else:
-                        # The file does not contain any data from wanted, valid pieces; we can
-                        # safely get rid of it.
-                        _remove_torrent_file(
-                            download_dir, file["name"], dry_run=dry_run
-                        )
-
-                current_offset = next_offset
+            for torrent_file, file_wanted in zip(
+                torrent.fields["files"], torrent.wanted
+            ):
+                file_length = torrent_file["length"]
+                self._process_file(
+                    torrent_file["name"], file_length, current_offset, file_wanted
+                )
+                current_offset += file_length
 
             run_before_check()
         except:
@@ -285,7 +238,7 @@ class _TorrentProcessor:
             _check_torrent(
                 transmission_client=transmission_client,
                 torrent_id=torrent_id,
-                pieces_present_wanted_previously=pieces_present_wanted,
+                pieces_present_wanted_previously=self._pieces_present_wanted,
                 piece_size=piece_size,
                 transmission_url=transmission_url,
             )
@@ -308,6 +261,61 @@ class _TorrentProcessor:
             self._torrent_id,
             lambda status: status == transmission_rpc.Status.STOPPED,
         )
+
+    def _process_file(self, file_name, file_length, current_offset, file_wanted):
+        begin_piece = current_offset // self._piece_size
+        end_piece = -(-(current_offset + file_length) // self._piece_size)
+        next_offset = current_offset + file_length
+
+        if not any(self._pieces_present_unwanted[begin_piece:end_piece]):
+            return
+        assert not file_wanted
+
+        if any(self._pieces_present_wanted[begin_piece:end_piece]):
+            # The file is not wanted, but it contains valid pieces that are wanted.
+            # In practice this means the file contains pieces that overlap with
+            # wanted, adjacent files. We can't get rid of the file without
+            # corrupting these pieces; best we can do is turn it into a partial
+            # file.
+
+            # Sanity check that the wanted pieces are where we expect them to be.
+            assert (
+                current_offset % self._piece_size != 0
+                or not self._pieces_wanted[begin_piece]
+            )
+            assert (
+                next_offset % self._piece_size != 0
+                or not self._pieces_wanted[end_piece - 1]
+            )
+            assert not any(self._pieces_wanted[begin_piece + 1 : end_piece - 1])
+
+            keep_first_bytes = (
+                (begin_piece + 1) * self._piece_size - current_offset
+                if self._pieces_present_wanted[begin_piece]
+                else 0
+            )
+            assert 0 <= keep_first_bytes < self._piece_size
+            keep_last_bytes = (
+                self._piece_size
+                - (end_piece * self._piece_size - current_offset - file_length)
+                if self._pieces_present_wanted[end_piece - 1]
+                else self._piece_size
+            )
+            assert 0 < keep_last_bytes <= self._piece_size
+            keep_last_bytes %= self._piece_size
+            assert keep_first_bytes > 0 or keep_last_bytes > 0
+            assert (keep_first_bytes + keep_last_bytes) < file_length
+            _trim_torrent_file(
+                self._download_dir,
+                file_name,
+                keep_first_bytes=keep_first_bytes,
+                keep_last_bytes=keep_last_bytes,
+                dry_run=self._dry_run,
+            )
+        else:
+            # The file does not contain any data from wanted, valid pieces; we can
+            # safely get rid of it.
+            _remove_torrent_file(self._download_dir, file_name, dry_run=self._dry_run)
 
 
 def _check_torrent(
