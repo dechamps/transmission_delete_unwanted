@@ -44,66 +44,6 @@ def _is_dir_empty(path):
     return True
 
 
-def _remove_torrent_file(download_dir, file_name, dry_run):
-    def delete(file_name_to_delete):
-        file_path = download_dir / file_name_to_delete
-        if not file_path.exists():
-            return False
-        print(
-            f"{'Would have removed' if dry_run else 'Removing'}: {file_name_to_delete}"
-        )
-        if not dry_run:
-            file_path.unlink()
-        return True
-
-    # Note: in the very unlikely scenario that a torrent contains a file named
-    # "xxx" *and* another file named "xxx.part", this may end up deleting the
-    # wrong file. For now we just accept the risk.
-    if not any([delete(file_name), delete(f"{file_name}.part")]):
-        print(f"WARNING: could not find {file_name} to delete")
-        return
-
-    if not dry_run:
-        parent_dir = (download_dir / file_name).parent
-        while _is_dir_empty(parent_dir):
-            parent_dir.rmdir()
-            parent_dir = parent_dir.parent
-
-
-def _trim_torrent_file(
-    download_dir, file_name, keep_first_bytes, keep_last_bytes, dry_run
-):
-    print(f"{'Would have trimmed' if dry_run else 'Trimming'}: {file_name}")
-    if dry_run:
-        return
-
-    # Note: on some operating systems there are ways to do this in-place without any
-    # copies ("hole punching"), e.g. fallocate(FALLOC_FL_PUNCH_HOLE) on Linux. This
-    # doesn't seem to be worth the extra complexity though, given the amount of data
-    # being copied should be relatively small.
-    original_file_path = download_dir / file_name
-    part_file_path = download_dir / f"{file_name}.part"
-    new_file_path = download_dir / f"{file_name}.transmission-delete-unwanted-tmp"
-    try:
-        with open(
-            original_file_path if original_file_path.exists() else part_file_path, "rb"
-        ) as original_file, open(new_file_path, "wb") as new_file:
-            if keep_first_bytes > 0:
-                file.copy(original_file, new_file, keep_first_bytes)
-            if keep_last_bytes > 0:
-                original_file.seek(
-                    -keep_last_bytes,
-                    2,  # Seek from the end
-                )
-                new_file.seek(original_file.tell())
-                file.copy(original_file, new_file, keep_last_bytes)
-
-        new_file_path.replace(part_file_path)
-        original_file_path.unlink(missing_ok=True)
-    finally:
-        new_file_path.unlink(missing_ok=True)
-
-
 class ScriptException(Exception):
     pass
 
@@ -273,17 +213,75 @@ class _TorrentProcessor:
             keep_last_bytes %= self._piece_size
             assert keep_first_bytes > 0 or keep_last_bytes > 0
             assert (keep_first_bytes + keep_last_bytes) < file_length
-            _trim_torrent_file(
-                self._download_dir,
+            self._trim_file(
                 file_name,
                 keep_first_bytes=keep_first_bytes,
                 keep_last_bytes=keep_last_bytes,
-                dry_run=self._dry_run,
             )
         else:
             # The file does not contain any data from wanted, valid pieces; we can
             # safely get rid of it.
-            _remove_torrent_file(self._download_dir, file_name, dry_run=self._dry_run)
+            self._remove_file(file_name)
+
+    def _trim_file(self, file_name, keep_first_bytes, keep_last_bytes):
+        print(f"{'Would have trimmed' if self._dry_run else 'Trimming'}: {file_name}")
+        if self._dry_run:
+            return
+
+        # Note: on some operating systems there are ways to do this in-place without any
+        # copies ("hole punching"), e.g. fallocate(FALLOC_FL_PUNCH_HOLE) on Linux. This
+        # doesn't seem to be worth the extra complexity though, given the amount of data
+        # being copied should be relatively small.
+        original_file_path = self._download_dir / file_name
+        part_file_path = self._download_dir / f"{file_name}.part"
+        new_file_path = (
+            self._download_dir / f"{file_name}.transmission-delete-unwanted-tmp"
+        )
+        try:
+            with open(
+                original_file_path if original_file_path.exists() else part_file_path,
+                "rb",
+            ) as original_file, open(new_file_path, "wb") as new_file:
+                if keep_first_bytes > 0:
+                    file.copy(original_file, new_file, keep_first_bytes)
+                if keep_last_bytes > 0:
+                    original_file.seek(
+                        -keep_last_bytes,
+                        2,  # Seek from the end
+                    )
+                    new_file.seek(original_file.tell())
+                    file.copy(original_file, new_file, keep_last_bytes)
+
+            new_file_path.replace(part_file_path)
+            original_file_path.unlink(missing_ok=True)
+        finally:
+            new_file_path.unlink(missing_ok=True)
+
+    def _remove_file(self, file_name):
+        def delete(file_name_to_delete):
+            file_path = self._download_dir / file_name_to_delete
+            if not file_path.exists():
+                return False
+            print(
+                f"{'Would have removed' if self._dry_run else 'Removing'}:"
+                f" {file_name_to_delete}"
+            )
+            if not self._dry_run:
+                file_path.unlink()
+            return True
+
+        # Note: in the very unlikely scenario that a torrent contains a file named
+        # "xxx" *and* another file named "xxx.part", this may end up deleting the
+        # wrong file. For now we just accept the risk.
+        if not any([delete(file_name), delete(f"{file_name}.part")]):
+            print(f"WARNING: could not find {file_name} to delete")
+            return
+
+        if not self._dry_run:
+            parent_dir = (self._download_dir / file_name).parent
+            while _is_dir_empty(parent_dir):
+                parent_dir.rmdir()
+                parent_dir = parent_dir.parent
 
     def _check_torrent(self):
         print("All done, kicking off torrent verification. This may take a while...")
