@@ -38,25 +38,6 @@ def _parse_arguments(args):
     return argument_parser.parse_args(args)
 
 
-def format_piece_count(piece_count, piece_size):
-    return f"{piece_count} pieces" + (
-        ""
-        if piece_count == 0
-        else f" ({humanize.naturalsize(piece_count * piece_size, binary=True)})"
-    )
-
-
-@backoff.on_predicate(
-    backoff.expo,
-    lambda status: status is None,
-    factor=0.050,
-    max_value=1.0,
-)
-def _wait_for_torrent_status(transmission_client, torrent_id, status_predicate):
-    status = transmission_client.get_torrent(torrent_id, arguments=["status"]).status
-    return status if status_predicate(status) else None
-
-
 def _is_dir_empty(path):
     for _ in path.iterdir():
         return False
@@ -194,17 +175,14 @@ class _TorrentProcessor:
             present and not wanted for wanted, present in pieces_wanted_present
         ]
 
-        piece_size = torrent.piece_size
-
-        def _format_piece_count(piece_count):
-            return format_piece_count(piece_count, piece_size)
-
         pieces_present_unwanted_count = self._pieces_present_unwanted.count(True)
         print(
-            f"Wanted: {_format_piece_count(self._pieces_wanted.count(True))}; present:"
-            f" {_format_piece_count(pieces_present.count(True))}; present and wanted:"
-            f" {_format_piece_count(self._pieces_present_wanted.count(True))}; present"
-            f" and not wanted: {_format_piece_count(pieces_present_unwanted_count)}"
+            f"Wanted: {self._format_piece_count(self._pieces_wanted.count(True))};"
+            f" present: {self._format_piece_count(pieces_present.count(True))}; present"
+            " and wanted:"
+            f" {self._format_piece_count(self._pieces_present_wanted.count(True))};"
+            " present and not wanted:"
+            f" {self._format_piece_count(pieces_present_unwanted_count)}"
         )
 
         if pieces_present_unwanted_count == 0:
@@ -235,13 +213,7 @@ class _TorrentProcessor:
             raise
 
         if not dry_run:
-            _check_torrent(
-                transmission_client=transmission_client,
-                torrent_id=torrent_id,
-                pieces_present_wanted_previously=self._pieces_present_wanted,
-                piece_size=piece_size,
-                transmission_url=transmission_url,
-            )
+            self._check_torrent()
             if not self._initially_stopped:
                 transmission_client.start_torrent(self._torrent_id)
 
@@ -256,11 +228,7 @@ class _TorrentProcessor:
         # Transmission does not stop torrents synchronously, so wait for the torrent to
         # transition to the stopped state. Hopefully Transmission will not attempt to
         # read from the torrent files after that point.
-        _wait_for_torrent_status(
-            self._transmission_client,
-            self._torrent_id,
-            lambda status: status == transmission_rpc.Status.STOPPED,
-        )
+        self._wait_for_status(lambda status: status == transmission_rpc.Status.STOPPED)
 
     def _process_file(self, file_name, file_length, current_offset, file_wanted):
         begin_piece = current_offset // self._piece_size
@@ -317,45 +285,59 @@ class _TorrentProcessor:
             # safely get rid of it.
             _remove_torrent_file(self._download_dir, file_name, dry_run=self._dry_run)
 
+    def _check_torrent(self):
+        print("All done, kicking off torrent verification. This may take a while...")
+        self._transmission_client.verify_torrent(self._torrent_id)
+        status = self._wait_for_status(
+            lambda status: status
+            not in (
+                transmission_rpc.Status.CHECKING,
+                transmission_rpc.Status.CHECK_PENDING,
+            ),
+        )
+        assert status == transmission_rpc.Status.STOPPED
+        torrent = self._transmission_client.get_torrent(
+            self._torrent_id, arguments=["pieces"]
+        )
+        lost_pieces_count = sum(
+            piece_present_wanted_previously and not piece_present_now
+            for piece_present_wanted_previously, piece_present_now in zip(
+                self._pieces_present_wanted,
+                pieces.to_array(torrent.pieces, len(self._pieces_present_wanted)),
+                strict=True,
+            )
+        )
+        if lost_pieces_count > 0:
+            raise CorruptTorrentException(
+                "Oh no, looks like we corrupted"
+                f" {self._format_piece_count(lost_pieces_count)} that were previously"
+                " valid and wanted :( This should never happen, please report this as"
+                " a bug (make sure to attach the output of `transmission-remote"
+                f" {self._transmission_url} --torrent {self._torrent_id} --info"
+                " --info-files --info-pieces`)"
+            )
+        print("Torrent verification successful.")
 
-def _check_torrent(
-    transmission_client,
-    torrent_id,
-    pieces_present_wanted_previously,
-    piece_size,
-    transmission_url,
-):
-    print("All done, kicking off torrent verification. This may take a while...")
-    transmission_client.verify_torrent(torrent_id)
-    status = _wait_for_torrent_status(
-        transmission_client,
-        torrent_id,
-        lambda status: status
-        not in (
-            transmission_rpc.Status.CHECKING,
-            transmission_rpc.Status.CHECK_PENDING,
-        ),
+    @backoff.on_predicate(
+        backoff.expo,
+        lambda status: status is None,
+        factor=0.050,
+        max_value=1.0,
     )
-    assert status == transmission_rpc.Status.STOPPED
-    torrent = transmission_client.get_torrent(torrent_id, arguments=["pieces"])
-    lost_pieces_count = sum(
-        piece_present_wanted_previously and not piece_present_now
-        for piece_present_wanted_previously, piece_present_now in zip(
-            pieces_present_wanted_previously,
-            pieces.to_array(torrent.pieces, len(pieces_present_wanted_previously)),
-            strict=True,
+    def _wait_for_status(self, status_predicate):
+        status = self._transmission_client.get_torrent(
+            self._torrent_id, arguments=["status"]
+        ).status
+        return status if status_predicate(status) else None
+
+    def _format_piece_count(self, piece_count):
+        return f"{piece_count} pieces" + (
+            ""
+            if piece_count == 0
+            else (
+                f" ({humanize.naturalsize(piece_count * self._piece_size, binary=True)})"
+            )
         )
-    )
-    if lost_pieces_count > 0:
-        raise CorruptTorrentException(
-            "Oh no, looks like we corrupted"
-            f" {format_piece_count(lost_pieces_count, piece_size)} that were previously"
-            " valid and wanted :( This should never happen, please report this as a"
-            " bug (make sure to attach the output of `transmission-remote"
-            f" {transmission_url} --torrent {torrent.id} --info --info-files"
-            " --info-pieces`)"
-        )
-    print("Torrent verification successful.")
 
 
 def run(args, run_before_check=lambda: None):
