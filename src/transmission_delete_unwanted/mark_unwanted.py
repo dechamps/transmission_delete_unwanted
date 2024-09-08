@@ -33,23 +33,33 @@ def _mark_unwanted(transmission_client):
         for file_id, file in enumerate(torrent.fields["files"])
     }
 
+    missing = False
     unwanted_file_ids_by_torrent_id = {}
     for file_name in (line.rstrip("\r\n") for line in sys.stdin):
         if len(file_name) == 0:
             continue
-        torrent_id, file_id = torrent_id_and_file_id_by_file_name[file_name]
+
+        torrent_id_and_file_id = torrent_id_and_file_id_by_file_name.get(file_name)
+        if torrent_id_and_file_id is None:
+            print(f"WARNING: file not found in torrents: {file_name}", file=sys.stderr)
+            missing = True
+            continue
+
+        torrent_id, file_id = torrent_id_and_file_id
         unwanted_file_ids_by_torrent_id.setdefault(torrent_id, []).append(file_id)
 
     for torrent_id, unwanted_file_ids in unwanted_file_ids_by_torrent_id.items():
         transmission_client.change_torrent(torrent_id, files_unwanted=unwanted_file_ids)
+
+    return not missing
 
 
 def run(args):
     args = _parse_arguments(args)
     transmission_url = args.transmission_url
     with transmission_rpc.from_url(transmission_url) as transmission_client:
-        _mark_unwanted(transmission_client)
+        return _mark_unwanted(transmission_client)
 
 
 def main():
-    run(args=None)
+    return 0 if run(args=None) else 1
