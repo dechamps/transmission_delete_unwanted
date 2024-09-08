@@ -44,6 +44,16 @@ def test_copy_partial(tmp_path, copy):
         assert to_file.read() == b"test"
 
 
+def test_copy_outofbounds(tmp_path, copy):
+    with open(tmp_path / "from.txt", "wb") as from_file:
+        from_file.write(b"test contents")
+    with open(tmp_path / "from.txt", "rb") as from_file, open(
+        tmp_path / "to.txt", "wb"
+    ) as to_file:
+        with pytest.raises(file.EOFException):
+            copy(from_file, to_file, 100)
+
+
 def test_copy_seek(tmp_path, copy):
     with open(tmp_path / "from.txt", "wb") as from_file:
         from_file.write(b"0123456789")
