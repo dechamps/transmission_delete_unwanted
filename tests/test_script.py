@@ -89,9 +89,9 @@ def _fixture_transmission_client(transmission_url):
 Torrent = collections.namedtuple("Torrent", ["path", "torf", "transmission"])
 
 
-@pytest.fixture(name="run_verify_torrent")
-def _fixture_run_verify_torrent(transmission_client):
-    def run_verify_torrent(torrent_id, request=True):
+@pytest.fixture(name="verify_torrent")
+def _fixture_verify_torrent(transmission_client):
+    def verify_torrent(torrent_id, request=True):
         if request:
             transmission_client.verify_torrent(torrent_id)
         _poll_until(
@@ -101,7 +101,7 @@ def _fixture_run_verify_torrent(transmission_client):
             != transmission_rpc.Status.CHECKING
         )
 
-    return run_verify_torrent
+    return verify_torrent
 
 
 @pytest.fixture(name="assert_torrent_status")
@@ -151,7 +151,7 @@ TorrentFile = collections.namedtuple(
 
 
 @pytest.fixture(name="setup_torrent")
-def _fixture_setup_torrent(transmission_client, run_verify_torrent):
+def _fixture_setup_torrent(transmission_client, verify_torrent):
     download_dir = transmission_client.get_session().download_dir
 
     paths = []
@@ -201,7 +201,7 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
             files_wanted[unwanted_file_index] = False
         assert transmission_info.wanted == files_wanted
 
-        run_verify_torrent(transmission_torrent.id, request=False)
+        verify_torrent(transmission_torrent.id, request=False)
 
         return Torrent(
             path=path,
@@ -217,8 +217,8 @@ def _fixture_setup_torrent(transmission_client, run_verify_torrent):
         shutil.rmtree(path)
 
 
-@pytest.fixture(name="transmission_delete_unwanted")
-def _fixture_transmission_delete_unwanted(transmission_url):
+@pytest.fixture(name="run")
+def _fixture_run(transmission_url):
     return lambda *kargs, **kwargs: transmission_delete_unwanted.script.run(
         ["--transmission-url", transmission_url] + list(kargs), **kwargs
     )
@@ -228,13 +228,11 @@ _TorrentIdKind = enum.Enum("TorrentIdKind", ["TRANSMISSION_ID", "HASH"])
 
 
 @pytest.fixture(
-    name="transmission_delete_unwanted_torrent",
+    name="run_with_torrent",
     params=[_TorrentIdKind.TRANSMISSION_ID, _TorrentIdKind.HASH],
 )
-def _fixture_transmission_delete_unwanted_torrent(
-    request, transmission_delete_unwanted
-):
-    return lambda torrent, *kargs, **kwargs: transmission_delete_unwanted(
+def _fixture_run_with_torrent(request, run):
+    return lambda torrent, *kargs, **kwargs: run(
         "--torrent-id",
         {
             _TorrentIdKind.TRANSMISSION_ID: str(torrent.transmission.id),
@@ -260,26 +258,26 @@ def _check_file_tree(root, files_contents):
 
 
 def test_noop_onefile_onepiece(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={"test.txt": TorrentFile(random.randbytes(4))}, piece_size=_MIN_PIECE_SIZE
     )
     assert torrent.torf.pieces == 1
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(torrent.transmission.id)
 
 
 def test_noop_multifile_onepiece(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={
@@ -291,16 +289,16 @@ def test_noop_multifile_onepiece(
     )
     assert torrent.torf.pieces == 1
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(torrent.transmission.id)
 
 
 def test_noop_multifile_onepiece_unwanted(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={
@@ -312,16 +310,16 @@ def test_noop_multifile_onepiece_unwanted(
     )
     assert torrent.torf.pieces == 1
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(torrent.transmission.id)
 
 
 def test_noop_onefile_multipiece(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={"test.txt": TorrentFile(random.randbytes(_MIN_PIECE_SIZE * 4))},
@@ -329,16 +327,16 @@ def test_noop_onefile_multipiece(
     )
     assert torrent.torf.pieces == 4
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(torrent.transmission.id)
 
 
 def test_noop_multifile_multipiece_aligned(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={
@@ -350,16 +348,16 @@ def test_noop_multifile_multipiece_aligned(
     )
     assert torrent.torf.pieces == 3
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(torrent.transmission.id)
 
 
 def test_noop_multifile_multipiece_aligned_incomplete(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={
@@ -380,16 +378,16 @@ def test_noop_multifile_multipiece_aligned_incomplete(
         )
 
     check_torrent_status()
-    transmission_delete_unwanted_torrent(torrent)
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent)
+    verify_torrent(torrent.transmission.id)
     check_torrent_status()
 
 
 def test_noop_multifile_multipiece_aligned_incomplete_unwanted(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={
@@ -410,17 +408,17 @@ def test_noop_multifile_multipiece_aligned_incomplete_unwanted(
         )
 
     check_torrent_status()
-    transmission_delete_unwanted_torrent(torrent)
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent)
+    verify_torrent(torrent.transmission.id)
     check_torrent_status()
 
 
 @pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
 def test_noop_multifile_multipiece_unaligned_incomplete(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
     shift_bytes,
 ):
     torrent = setup_torrent(
@@ -442,17 +440,17 @@ def test_noop_multifile_multipiece_unaligned_incomplete(
         )
 
     check_torrent_status()
-    transmission_delete_unwanted_torrent(torrent)
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent)
+    verify_torrent(torrent.transmission.id)
     check_torrent_status()
 
 
 @pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
 def test_noop_multifile_multipiece_unaligned_incomplete_unwanted(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
     shift_bytes,
 ):
     torrent = setup_torrent(
@@ -476,16 +474,16 @@ def test_noop_multifile_multipiece_unaligned_incomplete_unwanted(
     check_torrent_status()
     # Should be a no-op because there is no piece that doesn't overlap with a wanted
     # file.
-    transmission_delete_unwanted_torrent(torrent)
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent)
+    verify_torrent(torrent.transmission.id)
     check_torrent_status()
 
 
 def test_delete_aligned(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     test0contents = random.randbytes(_MIN_PIECE_SIZE)
     test2contents = random.randbytes(_MIN_PIECE_SIZE)
@@ -499,7 +497,7 @@ def test_delete_aligned(
     )
     assert torrent.torf.pieces == 3
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
+    run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {
@@ -507,7 +505,7 @@ def test_delete_aligned(
             torrent.path / "test2.txt": test2contents,
         },
     )
-    run_verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_pieces=[True, False, True],
@@ -515,10 +513,10 @@ def test_delete_aligned(
 
 
 def test_delete_dryrun(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={
@@ -530,16 +528,16 @@ def test_delete_dryrun(
     )
     assert torrent.torf.pieces == 3
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent, "--dry-run")
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent, "--dry-run")
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(torrent.transmission.id)
 
 
 def test_delete_aligned_incomplete(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     def corrupt_middle_piece(path):
         with open(path / "test1.txt", "r+b") as file:
@@ -564,7 +562,7 @@ def test_delete_aligned_incomplete(
         torrent.transmission.id,
         expect_pieces=[True, True, False, True, True],
     )
-    transmission_delete_unwanted_torrent(torrent)
+    run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {
@@ -572,7 +570,7 @@ def test_delete_aligned_incomplete(
             torrent.path / "test2.txt": test2contents,
         },
     )
-    run_verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_pieces=[True, False, False, False, True],
@@ -581,10 +579,10 @@ def test_delete_aligned_incomplete(
 
 @pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
 def test_trim_beginaligned(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
     shift_bytes,
 ):
     test0contents = random.randbytes(_MIN_PIECE_SIZE + shift_bytes)
@@ -598,7 +596,7 @@ def test_trim_beginaligned(
     )
     assert torrent.torf.pieces == 2
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
+    run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {
@@ -609,7 +607,7 @@ def test_trim_beginaligned(
             torrent.path / "test1.txt": test1contents,
         },
     )
-    run_verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_pieces=[False, True],
@@ -617,10 +615,10 @@ def test_trim_beginaligned(
 
 
 def test_trim_dryrun(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={
@@ -633,17 +631,17 @@ def test_trim_dryrun(
     )
     assert torrent.torf.pieces == 2
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent, "--dry-run")
-    run_verify_torrent(torrent.transmission.id)
+    run_with_torrent(torrent, "--dry-run")
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(torrent.transmission.id)
 
 
 @pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
 def test_trim_endaligned(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
     shift_bytes,
 ):
     test0contents = random.randbytes(_MIN_PIECE_SIZE - shift_bytes)
@@ -657,7 +655,7 @@ def test_trim_endaligned(
     )
     assert torrent.torf.pieces == 2
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
+    run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {
@@ -665,7 +663,7 @@ def test_trim_endaligned(
             torrent.path / "test1.txt.part": test1contents[:shift_bytes],
         },
     )
-    run_verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_pieces=[True, False],
@@ -675,10 +673,10 @@ def test_trim_endaligned(
 @pytest.mark.parametrize("left_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
 @pytest.mark.parametrize("right_shift_bytes", [1, _MIN_PIECE_SIZE // 2 - 1])
 def test_trim_unaligned(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
     left_shift_bytes,
     right_shift_bytes,
 ):
@@ -697,7 +695,7 @@ def test_trim_unaligned(
     )
     assert torrent.torf.pieces == 5
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
+    run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {
@@ -711,7 +709,7 @@ def test_trim_unaligned(
             torrent.path / "test2.txt": test2contents,
         },
     )
-    run_verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_pieces=[True, True, False, True, True],
@@ -725,10 +723,10 @@ def test_trim_unaligned(
     [(True, False), (False, True), (True, True)],
 )
 def test_trim_unaligned_incomplete(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
     left_shift_bytes,
     right_shift_bytes,
     incomplete_first_piece,
@@ -769,7 +767,7 @@ def test_trim_unaligned_incomplete(
             True,
         ],
     )
-    transmission_delete_unwanted_torrent(torrent)
+    run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         (
@@ -802,7 +800,7 @@ def test_trim_unaligned_incomplete(
             )
         ),
     )
-    run_verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_completed=False,
@@ -817,10 +815,10 @@ def test_trim_unaligned_incomplete(
 
 
 def test_delete_directory(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     test0contents = random.randbytes(_MIN_PIECE_SIZE)
     test2contents = random.randbytes(_MIN_PIECE_SIZE)
@@ -838,7 +836,7 @@ def test_delete_directory(
     assert_torrent_status(torrent.transmission.id)
     directory_to_delete = torrent.path / "subdir1"
     assert directory_to_delete.exists()
-    transmission_delete_unwanted_torrent(torrent)
+    run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {
@@ -847,7 +845,7 @@ def test_delete_directory(
         },
     )
     assert not directory_to_delete.exists()
-    run_verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_pieces=[True, False, True],
@@ -855,10 +853,10 @@ def test_delete_directory(
 
 
 def test_delete_directories(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     test0contents = random.randbytes(_MIN_PIECE_SIZE)
     test2contents = random.randbytes(_MIN_PIECE_SIZE)
@@ -876,7 +874,7 @@ def test_delete_directories(
     assert_torrent_status(torrent.transmission.id)
     directory_to_delete = torrent.path / "subdir1"
     assert directory_to_delete.exists()
-    transmission_delete_unwanted_torrent(torrent)
+    run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {
@@ -885,7 +883,7 @@ def test_delete_directories(
         },
     )
     assert not directory_to_delete.exists()
-    run_verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_pieces=[True, False, True],
@@ -893,10 +891,10 @@ def test_delete_directories(
 
 
 def test_delete_part(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
-    run_verify_torrent,
+    verify_torrent,
 ):
     test0contents = random.randbytes(_MIN_PIECE_SIZE)
     test2contents = random.randbytes(_MIN_PIECE_SIZE)
@@ -911,7 +909,7 @@ def test_delete_part(
     )
     assert torrent.torf.pieces == 3
     assert_torrent_status(torrent.transmission.id)
-    transmission_delete_unwanted_torrent(torrent)
+    run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {
@@ -919,7 +917,7 @@ def test_delete_part(
             torrent.path / "test2.txt": test2contents,
         },
     )
-    run_verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.transmission.id)
     assert_torrent_status(
         torrent.transmission.id,
         expect_pieces=[True, False, True],
@@ -927,7 +925,7 @@ def test_delete_part(
 
 
 def test_verify(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
 ):
@@ -945,11 +943,11 @@ def test_verify(
             file.write(b"x" * _MIN_PIECE_SIZE)
 
     with pytest.raises(transmission_delete_unwanted.script.CorruptTorrentException):
-        transmission_delete_unwanted_torrent(torrent, run_before_check=corrupt)
+        run_with_torrent(torrent, run_before_check=corrupt)
 
 
 def test_verify_dryrun(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
 ):
@@ -966,13 +964,13 @@ def test_verify_dryrun(
         with open(torrent.path / "test0.txt", "wb") as file:
             file.write(b"x" * _MIN_PIECE_SIZE)
 
-    transmission_delete_unwanted_torrent(torrent, "--dry-run", run_before_check=corrupt)
+    run_with_torrent(torrent, "--dry-run", run_before_check=corrupt)
 
     assert_torrent_status(torrent.transmission.id)
 
 
 def test_stop(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
     transmission_client,
@@ -994,7 +992,7 @@ def test_stop(
             == transmission_rpc.Status.STOPPED
         )
 
-    transmission_delete_unwanted_torrent(torrent, run_before_check=check_stopped)
+    run_with_torrent(torrent, run_before_check=check_stopped)
     assert_torrent_status(
         torrent.transmission.id,
         expect_pieces=[True, False],
@@ -1002,7 +1000,7 @@ def test_stop(
 
 
 def test_stop_dryrun(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
     transmission_client,
@@ -1024,9 +1022,7 @@ def test_stop_dryrun(
             != transmission_rpc.Status.STOPPED
         )
 
-    transmission_delete_unwanted_torrent(
-        torrent, "--dry-run", run_before_check=check_not_stopped
-    )
+    run_with_torrent(torrent, "--dry-run", run_before_check=check_not_stopped)
 
 
 @pytest.mark.parametrize(
@@ -1034,7 +1030,7 @@ def test_stop_dryrun(
     [False, True],
 )
 def test_stays_stopped(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
     transmission_client,
@@ -1064,18 +1060,18 @@ def test_stays_stopped(
     def check_stopped():
         assert is_stopped()
 
-    transmission_delete_unwanted_torrent(
+    run_with_torrent(
         torrent, *["--dry-run"] if dry_run else [], run_before_check=check_stopped
     )
     check_stopped()
 
 
 def test_verify_on_error(
-    transmission_delete_unwanted_torrent,
+    run_with_torrent,
     setup_torrent,
     assert_torrent_status,
     transmission_client,
-    run_verify_torrent,
+    verify_torrent,
 ):
     torrent = setup_torrent(
         files={
@@ -1094,10 +1090,8 @@ def test_verify_on_error(
         raise TestException()
 
     with pytest.raises(TestException):
-        transmission_delete_unwanted_torrent(
-            torrent, run_before_check=raise_test_exception
-        )
-    run_verify_torrent(torrent.transmission.id, request=False)
+        run_with_torrent(torrent, run_before_check=raise_test_exception)
+    verify_torrent(torrent.transmission.id, request=False)
     transmission_info = transmission_client.get_torrent(
         torrent.transmission.id, arguments=["status", "pieces"]
     )
