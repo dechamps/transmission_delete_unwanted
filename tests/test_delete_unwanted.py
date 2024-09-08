@@ -11,7 +11,7 @@ import backoff
 import pytest
 import torf
 import transmission_rpc
-import transmission_delete_unwanted.script
+import transmission_delete_unwanted.delete_unwanted
 import transmission_delete_unwanted.pieces
 
 
@@ -219,7 +219,7 @@ def _fixture_setup_torrent(transmission_client, verify_torrent):
 
 @pytest.fixture(name="run")
 def _fixture_run(transmission_url):
-    return lambda *kargs, **kwargs: transmission_delete_unwanted.script.run(
+    return lambda *kargs, **kwargs: transmission_delete_unwanted.delete_unwanted.run(
         ["--transmission-url", transmission_url] + list(kargs), **kwargs
     )
 
@@ -923,7 +923,9 @@ def test_verify(
         with open(torrent.path / "test0.txt", "wb") as file:
             file.write(b"x" * _MIN_PIECE_SIZE)
 
-    with pytest.raises(transmission_delete_unwanted.script.CorruptTorrentException):
+    with pytest.raises(
+        transmission_delete_unwanted.delete_unwanted.CorruptTorrentException
+    ):
         run_with_torrent(torrent, run_before_check=corrupt)
 
 

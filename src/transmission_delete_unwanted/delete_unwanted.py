@@ -44,11 +44,11 @@ def _is_dir_empty(path):
     return True
 
 
-class ScriptException(Exception):
+class DeleteUnwantedException(Exception):
     pass
 
 
-class CorruptTorrentException(ScriptException):
+class CorruptTorrentException(DeleteUnwantedException):
     pass
 
 
@@ -369,7 +369,7 @@ def run(args, run_before_check=lambda: None):
 def main():
     try:
         run(args=None)
-    except ScriptException as script_exception:
-        print(f"FATAL ERROR: {script_exception.args[0]}", file=sys.stderr)
+    except DeleteUnwantedException as exception:
+        print(f"FATAL ERROR: {exception.args[0]}", file=sys.stderr)
         return 1
     return 0

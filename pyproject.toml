@@ -24,7 +24,7 @@ build-backend = "setuptools.build_meta"
 dependencies = {file = ["requirements.txt"]}
 
 [project.scripts]
-transmission-delete-unwanted = "transmission_delete_unwanted.script:main"
+transmission-delete-unwanted = "transmission_delete_unwanted.delete_unwanted:main"
 
 [tool.pip-tools]
 # We could use generate-hashes here, but sadly we can't, because that would make the
