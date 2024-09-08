@@ -131,6 +131,180 @@ class CorruptTorrentException(ScriptException):
     pass
 
 
+class _TorrentProcessor:
+    def __init__(
+        self,
+        transmission_client,
+        torrent_id,
+        download_dir,
+        run_before_check,
+        transmission_url,
+        dry_run,
+    ):
+        self._transmission_client = transmission_client
+        self._download_dir = download_dir
+        self._transmission_url = transmission_url
+        self._dry_run = dry_run
+
+        torrent = transmission_client.get_torrent(
+            torrent_id,
+            arguments=[
+                "id",
+                "infohash",
+                "name",
+                "files",
+                "pieces",
+                "pieceCount",
+                "pieceSize",
+                "wanted",
+                "status",
+            ],
+        )
+        torrent_id = torrent.id
+        print(
+            f'>>> PROCESSING TORRENT: "{torrent.name}" (hash: {torrent.info_hash} id:'
+            f" {torrent_id})"
+        )
+
+        total_piece_count = torrent.piece_count
+        pieces_wanted = pieces.pieces_wanted_from_files(
+            # Note we use torrent.fields["files"], not torrent.get_files(), to work around
+            # https://github.com/trim21/transmission-rpc/issues/455
+            [file["length"] for file in torrent.fields["files"]],
+            torrent.wanted,
+            torrent.piece_size,
+        )
+        assert len(pieces_wanted) == total_piece_count
+        pieces_present = pieces.to_array(torrent.pieces, total_piece_count)
+        assert len(pieces_present) == total_piece_count
+
+        pieces_wanted_present = list(
+            zip(
+                pieces_wanted,
+                pieces_present,
+                strict=True,
+            )
+        )
+        pieces_present_wanted = [
+            present and wanted for wanted, present in pieces_wanted_present
+        ]
+        pieces_present_unwanted = [
+            present and not wanted for wanted, present in pieces_wanted_present
+        ]
+
+        piece_size = torrent.piece_size
+
+        def _format_piece_count(piece_count):
+            return format_piece_count(piece_count, piece_size)
+
+        pieces_present_unwanted_count = pieces_present_unwanted.count(True)
+        print(
+            f"Wanted: {_format_piece_count(pieces_wanted.count(True))}; present:"
+            f" {_format_piece_count(pieces_present.count(True))}; present and wanted:"
+            f" {_format_piece_count(pieces_present_wanted.count(True))}; present and"
+            f" not wanted: {_format_piece_count(pieces_present_unwanted_count)}"
+        )
+
+        if pieces_present_unwanted_count == 0:
+            print("Every downloaded piece is wanted. Nothing to do.")
+            return
+
+        initially_stopped = torrent.status == transmission_rpc.Status.STOPPED
+        if not initially_stopped and not dry_run:
+            # Stop the torrent before we make any changes. We don't want to risk
+            # Transmission serving deleted pieces that it thinks are still there. It is only
+            # safe to resume the torrent after a completed verification (hash check).
+            transmission_client.stop_torrent(torrent_id)
+            # Transmission does not stop torrents synchronously, so wait for the torrent to
+            # transition to the stopped state. Hopefully Transmission will not attempt to
+            # read from the torrent files after that point.
+            _wait_for_torrent_status(
+                transmission_client,
+                torrent_id,
+                lambda status: status == transmission_rpc.Status.STOPPED,
+            )
+
+        try:
+            current_offset = 0
+            for file, file_wanted in zip(torrent.fields["files"], torrent.wanted):
+                file_length = file["length"]
+                begin_piece = current_offset // piece_size
+                end_piece = -(-(current_offset + file_length) // piece_size)
+                next_offset = current_offset + file_length
+
+                if any(pieces_present_unwanted[begin_piece:end_piece]):
+                    assert not file_wanted
+                    if any(pieces_present_wanted[begin_piece:end_piece]):
+                        # The file is not wanted, but it contains valid pieces that are wanted.
+                        # In practice this means the file contains pieces that overlap with
+                        # wanted, adjacent files. We can't get rid of the file without
+                        # corrupting these pieces; best we can do is turn it into a partial
+                        # file.
+
+                        # Sanity check that the wanted pieces are where we expect them to be.
+                        assert (
+                            current_offset % piece_size != 0
+                            or not pieces_wanted[begin_piece]
+                        )
+                        assert (
+                            next_offset % piece_size != 0
+                            or not pieces_wanted[end_piece - 1]
+                        )
+                        assert not any(pieces_wanted[begin_piece + 1 : end_piece - 1])
+
+                        keep_first_bytes = (
+                            (begin_piece + 1) * piece_size - current_offset
+                            if pieces_present_wanted[begin_piece]
+                            else 0
+                        )
+                        assert 0 <= keep_first_bytes < piece_size
+                        keep_last_bytes = (
+                            piece_size - (end_piece * piece_size - next_offset)
+                            if pieces_present_wanted[end_piece - 1]
+                            else piece_size
+                        )
+                        assert 0 < keep_last_bytes <= piece_size
+                        keep_last_bytes %= piece_size
+                        assert keep_first_bytes > 0 or keep_last_bytes > 0
+                        assert (keep_first_bytes + keep_last_bytes) < file_length
+                        _trim_torrent_file(
+                            download_dir,
+                            file["name"],
+                            keep_first_bytes=keep_first_bytes,
+                            keep_last_bytes=keep_last_bytes,
+                            dry_run=dry_run,
+                        )
+                    else:
+                        # The file does not contain any data from wanted, valid pieces; we can
+                        # safely get rid of it.
+                        _remove_torrent_file(
+                            download_dir, file["name"], dry_run=dry_run
+                        )
+
+                current_offset = next_offset
+
+            run_before_check()
+        except:
+            # If we are interrupted while touching torrent data, before we bail at least try
+            # to kick off a verification so that Transmission is aware that data may have
+            # changed. Otherwise the risk is the user may just resume the torrent and start
+            # serving corrupt pieces.
+            if not dry_run:
+                transmission_client.verify_torrent(torrent_id)
+            raise
+
+        if not dry_run:
+            _check_torrent(
+                transmission_client=transmission_client,
+                torrent_id=torrent_id,
+                pieces_present_wanted_previously=pieces_present_wanted,
+                piece_size=piece_size,
+                transmission_url=transmission_url,
+            )
+            if not initially_stopped:
+                transmission_client.start_torrent(torrent_id)
+
+
 def _check_torrent(
     transmission_client,
     torrent_id,
@@ -171,171 +345,6 @@ def _check_torrent(
     print("Torrent verification successful.")
 
 
-def _process_torrent(
-    transmission_client,
-    torrent_id,
-    download_dir,
-    run_before_check,
-    transmission_url,
-    dry_run,
-):
-    torrent = transmission_client.get_torrent(
-        torrent_id,
-        arguments=[
-            "id",
-            "infohash",
-            "name",
-            "files",
-            "pieces",
-            "pieceCount",
-            "pieceSize",
-            "wanted",
-            "status",
-        ],
-    )
-    torrent_id = torrent.id
-    print(
-        f'>>> PROCESSING TORRENT: "{torrent.name}" (hash: {torrent.info_hash} id:'
-        f" {torrent_id})"
-    )
-
-    total_piece_count = torrent.piece_count
-    pieces_wanted = pieces.pieces_wanted_from_files(
-        # Note we use torrent.fields["files"], not torrent.get_files(), to work around
-        # https://github.com/trim21/transmission-rpc/issues/455
-        [file["length"] for file in torrent.fields["files"]],
-        torrent.wanted,
-        torrent.piece_size,
-    )
-    assert len(pieces_wanted) == total_piece_count
-    pieces_present = pieces.to_array(torrent.pieces, total_piece_count)
-    assert len(pieces_present) == total_piece_count
-
-    pieces_wanted_present = list(
-        zip(
-            pieces_wanted,
-            pieces_present,
-            strict=True,
-        )
-    )
-    pieces_present_wanted = [
-        present and wanted for wanted, present in pieces_wanted_present
-    ]
-    pieces_present_unwanted = [
-        present and not wanted for wanted, present in pieces_wanted_present
-    ]
-
-    piece_size = torrent.piece_size
-
-    def _format_piece_count(piece_count):
-        return format_piece_count(piece_count, piece_size)
-
-    pieces_present_unwanted_count = pieces_present_unwanted.count(True)
-    print(
-        f"Wanted: {_format_piece_count(pieces_wanted.count(True))}; present:"
-        f" {_format_piece_count(pieces_present.count(True))}; present and wanted:"
-        f" {_format_piece_count(pieces_present_wanted.count(True))}; present and not"
-        f" wanted: {_format_piece_count(pieces_present_unwanted_count)}"
-    )
-
-    if pieces_present_unwanted_count == 0:
-        print("Every downloaded piece is wanted. Nothing to do.")
-        return
-
-    initially_stopped = torrent.status == transmission_rpc.Status.STOPPED
-    if not initially_stopped and not dry_run:
-        # Stop the torrent before we make any changes. We don't want to risk
-        # Transmission serving deleted pieces that it thinks are still there. It is only
-        # safe to resume the torrent after a completed verification (hash check).
-        transmission_client.stop_torrent(torrent_id)
-        # Transmission does not stop torrents synchronously, so wait for the torrent to
-        # transition to the stopped state. Hopefully Transmission will not attempt to
-        # read from the torrent files after that point.
-        _wait_for_torrent_status(
-            transmission_client,
-            torrent_id,
-            lambda status: status == transmission_rpc.Status.STOPPED,
-        )
-
-    try:
-        current_offset = 0
-        for file, file_wanted in zip(torrent.fields["files"], torrent.wanted):
-            file_length = file["length"]
-            begin_piece = current_offset // piece_size
-            end_piece = -(-(current_offset + file_length) // piece_size)
-            next_offset = current_offset + file_length
-
-            if any(pieces_present_unwanted[begin_piece:end_piece]):
-                assert not file_wanted
-                if any(pieces_present_wanted[begin_piece:end_piece]):
-                    # The file is not wanted, but it contains valid pieces that are wanted.
-                    # In practice this means the file contains pieces that overlap with
-                    # wanted, adjacent files. We can't get rid of the file without
-                    # corrupting these pieces; best we can do is turn it into a partial
-                    # file.
-
-                    # Sanity check that the wanted pieces are where we expect them to be.
-                    assert (
-                        current_offset % piece_size != 0
-                        or not pieces_wanted[begin_piece]
-                    )
-                    assert (
-                        next_offset % piece_size != 0
-                        or not pieces_wanted[end_piece - 1]
-                    )
-                    assert not any(pieces_wanted[begin_piece + 1 : end_piece - 1])
-
-                    keep_first_bytes = (
-                        (begin_piece + 1) * piece_size - current_offset
-                        if pieces_present_wanted[begin_piece]
-                        else 0
-                    )
-                    assert 0 <= keep_first_bytes < piece_size
-                    keep_last_bytes = (
-                        piece_size - (end_piece * piece_size - next_offset)
-                        if pieces_present_wanted[end_piece - 1]
-                        else piece_size
-                    )
-                    assert 0 < keep_last_bytes <= piece_size
-                    keep_last_bytes %= piece_size
-                    assert keep_first_bytes > 0 or keep_last_bytes > 0
-                    assert (keep_first_bytes + keep_last_bytes) < file_length
-                    _trim_torrent_file(
-                        download_dir,
-                        file["name"],
-                        keep_first_bytes=keep_first_bytes,
-                        keep_last_bytes=keep_last_bytes,
-                        dry_run=dry_run,
-                    )
-                else:
-                    # The file does not contain any data from wanted, valid pieces; we can
-                    # safely get rid of it.
-                    _remove_torrent_file(download_dir, file["name"], dry_run=dry_run)
-
-            current_offset = next_offset
-
-        run_before_check()
-    except:
-        # If we are interrupted while touching torrent data, before we bail at least try
-        # to kick off a verification so that Transmission is aware that data may have
-        # changed. Otherwise the risk is the user may just resume the torrent and start
-        # serving corrupt pieces.
-        if not dry_run:
-            transmission_client.verify_torrent(torrent_id)
-        raise
-
-    if not dry_run:
-        _check_torrent(
-            transmission_client=transmission_client,
-            torrent_id=torrent_id,
-            pieces_present_wanted_previously=pieces_present_wanted,
-            piece_size=piece_size,
-            transmission_url=transmission_url,
-        )
-        if not initially_stopped:
-            transmission_client.start_torrent(torrent_id)
-
-
 def run(args, run_before_check=lambda: None):
     args = _parse_arguments(args)
     transmission_url = args.transmission_url
@@ -354,7 +363,7 @@ def run(args, run_before_check=lambda: None):
                 for torrent_id in torrent_ids
             )
         ):
-            _process_torrent(
+            _TorrentProcessor(
                 transmission_client=transmission_client,
                 torrent_id=torrent_id,
                 download_dir=download_dir,
