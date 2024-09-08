@@ -46,6 +46,7 @@ disable = [
     "too-many-arguments",
     "too-many-locals",
     "too-few-public-methods",
+    "too-many-instance-attributes",
 ]
 
 [tool.pytest.ini_options]
