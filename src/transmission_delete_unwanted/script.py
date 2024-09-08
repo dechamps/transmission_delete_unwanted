@@ -4,7 +4,7 @@ import sys
 import backoff
 import humanize
 import transmission_rpc
-from transmission_delete_unwanted import pieces
+from transmission_delete_unwanted import file, pieces
 
 
 def _parse_arguments(args):
@@ -107,20 +107,15 @@ def _trim_torrent_file(
         with open(
             original_file_path if original_file_path.exists() else part_file_path, "rb"
         ) as original_file, open(new_file_path, "wb") as new_file:
-            # TODO: this could potentially load an unbounded amount of data in memory,
-            # especially if the torrent is using a large piece size. We should break the
-            # copy operation down into small buffers. Even better would be to use an
-            # optimized function such as `os.copy_file_range()` or `os.sendfile()` but
-            # these are sadly platform-dependent.
             if keep_first_bytes > 0:
-                new_file.write(original_file.read(keep_first_bytes))
+                file.copy(original_file, new_file, keep_first_bytes)
             if keep_last_bytes > 0:
                 original_file.seek(
                     -keep_last_bytes,
                     2,  # Seek from the end
                 )
                 new_file.seek(original_file.tell())
-                new_file.write(original_file.read(keep_last_bytes))
+                file.copy(original_file, new_file, keep_last_bytes)
 
         new_file_path.replace(part_file_path)
         original_file_path.unlink(missing_ok=True)
