@@ -203,7 +203,7 @@ def _process_torrent(
 
     piece_size = torrent.piece_size
 
-    def _format_piece_count(piece_count):
+    def format_piece_count(piece_count):
         return f"{piece_count} pieces" + (
             ""
             if piece_count == 0
@@ -212,10 +212,10 @@ def _process_torrent(
 
     pieces_present_unwanted_count = pieces_present_unwanted.count(True)
     print(
-        f"Wanted: {_format_piece_count(pieces_wanted.count(True))}; present:"
-        f" {_format_piece_count(pieces_present.count(True))}; present and wanted:"
-        f" {_format_piece_count(pieces_present_wanted.count(True))}; present and not"
-        f" wanted: {_format_piece_count(pieces_present_unwanted_count)}"
+        f"Wanted: {format_piece_count(pieces_wanted.count(True))}; present:"
+        f" {format_piece_count(pieces_present.count(True))}; present and wanted:"
+        f" {format_piece_count(pieces_present_wanted.count(True))}; present and not"
+        f" wanted: {format_piece_count(pieces_present_unwanted_count)}"
     )
 
     if pieces_present_unwanted_count == 0:
@@ -329,7 +329,7 @@ def _process_torrent(
         if lost_pieces_count > 0:
             raise CorruptTorrentException(
                 "Oh no, looks like we corrupted"
-                f" {_format_piece_count(lost_pieces_count)} that were previously valid"
+                f" {format_piece_count(lost_pieces_count)} that were previously valid"
                 " and wanted :( This should never happen, please report this as a bug"
                 " (make sure to attach the output of `transmission-remote"
                 f" {transmission_url} --torrent {torrent.id} --info --info-files"

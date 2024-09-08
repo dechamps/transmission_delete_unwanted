@@ -540,7 +540,7 @@ def test_delete_aligned_incomplete(
     assert_torrent_status,
     run_verify_torrent,
 ):
-    def _corrupt_middle_piece(path):
+    def corrupt_middle_piece(path):
         with open(path / "test1.txt", "r+b") as file:
             file.seek(_MIN_PIECE_SIZE)
             file.write(b"x" * _MIN_PIECE_SIZE)
@@ -556,7 +556,7 @@ def test_delete_aligned_incomplete(
             "test2.txt": TorrentFile(test2contents),
         },
         piece_size=_MIN_PIECE_SIZE,
-        before_add=_corrupt_middle_piece,
+        before_add=corrupt_middle_piece,
     )
     assert torrent.torf.pieces == 5
     assert_torrent_status(
@@ -733,7 +733,7 @@ def test_trim_unaligned_incomplete(
     incomplete_first_piece,
     incomplete_last_piece,
 ):
-    def _corrupt_pieces(path):
+    def corrupt_pieces(path):
         with open(path / "test1.txt", "r+b") as file:
             if incomplete_first_piece:
                 file.write(b"x" * (_MIN_PIECE_SIZE // 4))
@@ -754,7 +754,7 @@ def test_trim_unaligned_incomplete(
             "test2.txt": TorrentFile(test2contents),
         },
         piece_size=_MIN_PIECE_SIZE,
-        before_add=_corrupt_pieces,
+        before_add=corrupt_pieces,
     )
     assert torrent.torf.pieces == 5
     assert_torrent_status(
@@ -939,12 +939,12 @@ def test_verify(
     )
     assert_torrent_status(torrent.transmission.id)
 
-    def _before_check():
+    def corrupt():
         with open(torrent.path / "test0.txt", "wb") as file:
             file.write(b"x" * _MIN_PIECE_SIZE)
 
     with pytest.raises(transmission_delete_unwanted.script.CorruptTorrentException):
-        transmission_delete_unwanted_torrent(torrent, run_before_check=_before_check)
+        transmission_delete_unwanted_torrent(torrent, run_before_check=corrupt)
 
 
 def test_verify_dryrun(
@@ -961,13 +961,11 @@ def test_verify_dryrun(
     )
     assert_torrent_status(torrent.transmission.id)
 
-    def _before_check():
+    def corrupt():
         with open(torrent.path / "test0.txt", "wb") as file:
             file.write(b"x" * _MIN_PIECE_SIZE)
 
-    transmission_delete_unwanted_torrent(
-        torrent, "--dry-run", run_before_check=_before_check
-    )
+    transmission_delete_unwanted_torrent(torrent, "--dry-run", run_before_check=corrupt)
 
     assert_torrent_status(torrent.transmission.id)
 
