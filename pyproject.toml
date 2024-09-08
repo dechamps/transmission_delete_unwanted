@@ -25,6 +25,7 @@ dependencies = {file = ["requirements.txt"]}
 
 [project.scripts]
 transmission-delete-unwanted = "transmission_delete_unwanted.delete_unwanted:main"
+transmission-mark-unwanted = "transmission_delete_unwanted.mark_unwanted:main"
 
 [tool.pip-tools]
 # We could use generate-hashes here, but sadly we can't, because that would make the
