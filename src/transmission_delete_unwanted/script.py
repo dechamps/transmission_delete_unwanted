@@ -35,6 +35,14 @@ def _parse_arguments(args):
     return argument_parser.parse_args(args)
 
 
+def format_piece_count(piece_count, piece_size):
+    return f"{piece_count} pieces" + (
+        ""
+        if piece_count == 0
+        else f" ({humanize.naturalsize(piece_count * piece_size, binary=True)})"
+    )
+
+
 @backoff.on_predicate(
     backoff.expo,
     lambda status: status is None,
@@ -125,6 +133,46 @@ class CorruptTorrentException(ScriptException):
     pass
 
 
+def _check_torrent(
+    transmission_client,
+    torrent_id,
+    pieces_present_wanted_previously,
+    piece_size,
+    transmission_url,
+):
+    print("All done, kicking off torrent verification. This may take a while...")
+    transmission_client.verify_torrent(torrent_id)
+    status = _wait_for_torrent_status(
+        transmission_client,
+        torrent_id,
+        lambda status: status
+        not in (
+            transmission_rpc.Status.CHECKING,
+            transmission_rpc.Status.CHECK_PENDING,
+        ),
+    )
+    assert status == transmission_rpc.Status.STOPPED
+    torrent = transmission_client.get_torrent(torrent_id, arguments=["pieces"])
+    lost_pieces_count = sum(
+        piece_present_wanted_previously and not piece_present_now
+        for piece_present_wanted_previously, piece_present_now in zip(
+            pieces_present_wanted_previously,
+            pieces.to_array(torrent.pieces, len(pieces_present_wanted_previously)),
+            strict=True,
+        )
+    )
+    if lost_pieces_count > 0:
+        raise CorruptTorrentException(
+            "Oh no, looks like we corrupted"
+            f" {format_piece_count(lost_pieces_count, piece_size)} that were previously"
+            " valid and wanted :( This should never happen, please report this as a"
+            " bug (make sure to attach the output of `transmission-remote"
+            f" {transmission_url} --torrent {torrent.id} --info --info-files"
+            " --info-pieces`)"
+        )
+    print("Torrent verification successful.")
+
+
 def _process_torrent(
     transmission_client,
     torrent_id,
@@ -181,19 +229,15 @@ def _process_torrent(
 
     piece_size = torrent.piece_size
 
-    def format_piece_count(piece_count):
-        return f"{piece_count} pieces" + (
-            ""
-            if piece_count == 0
-            else f" ({humanize.naturalsize(piece_count * piece_size, binary=True)})"
-        )
+    def _format_piece_count(piece_count):
+        return format_piece_count(piece_count, piece_size)
 
     pieces_present_unwanted_count = pieces_present_unwanted.count(True)
     print(
-        f"Wanted: {format_piece_count(pieces_wanted.count(True))}; present:"
-        f" {format_piece_count(pieces_present.count(True))}; present and wanted:"
-        f" {format_piece_count(pieces_present_wanted.count(True))}; present and not"
-        f" wanted: {format_piece_count(pieces_present_unwanted_count)}"
+        f"Wanted: {_format_piece_count(pieces_wanted.count(True))}; present:"
+        f" {_format_piece_count(pieces_present.count(True))}; present and wanted:"
+        f" {_format_piece_count(pieces_present_wanted.count(True))}; present and not"
+        f" wanted: {_format_piece_count(pieces_present_unwanted_count)}"
     )
 
     if pieces_present_unwanted_count == 0:
@@ -283,40 +327,15 @@ def _process_torrent(
         raise
 
     if not dry_run:
-        print("All done, kicking off torrent verification. This may take a while...")
-        transmission_client.verify_torrent(torrent_id)
-        status = _wait_for_torrent_status(
-            transmission_client,
-            torrent_id,
-            lambda status: status
-            not in (
-                transmission_rpc.Status.CHECKING,
-                transmission_rpc.Status.CHECK_PENDING,
-            ),
+        _check_torrent(
+            transmission_client=transmission_client,
+            torrent_id=torrent_id,
+            pieces_present_wanted_previously=pieces_present_wanted,
+            piece_size=piece_size,
+            transmission_url=transmission_url,
         )
-        assert status == transmission_rpc.Status.STOPPED
-        torrent = transmission_client.get_torrent(torrent_id, arguments=["pieces"])
-        lost_pieces_count = sum(
-            piece_present_wanted_previously and not piece_present_now
-            for piece_present_wanted_previously, piece_present_now in zip(
-                pieces_present_wanted,
-                pieces.to_array(torrent.pieces, total_piece_count),
-                strict=True,
-            )
-        )
-        if lost_pieces_count > 0:
-            raise CorruptTorrentException(
-                "Oh no, looks like we corrupted"
-                f" {format_piece_count(lost_pieces_count)} that were previously valid"
-                " and wanted :( This should never happen, please report this as a bug"
-                " (make sure to attach the output of `transmission-remote"
-                f" {transmission_url} --torrent {torrent.id} --info --info-files"
-                " --info-pieces`)"
-            )
-        print("Torrent verification successful.")
-
-    if not initially_stopped and not dry_run:
-        transmission_client.start_torrent(torrent_id)
+        if not initially_stopped:
+            transmission_client.start_torrent(torrent_id)
 
 
 def run(args, run_before_check=lambda: None):
