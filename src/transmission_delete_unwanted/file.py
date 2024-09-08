@@ -1,7 +1,7 @@
-def copy(from_file, to_file, length):
-    # TODO: this could potentially load an unbounded amount of data in memory,
-    # especially if the torrent is using a large piece size. We should break the
-    # copy operation down into small buffers. Even better would be to use an
-    # optimized function such as `os.copy_file_range()` or `os.sendfile()` but
-    # these are sadly platform-dependent.
-    to_file.write(from_file.read(length))
+def copy(from_file, to_file, length, buffer_size=1024 * 1024):
+    while length > 0:
+        buffer = from_file.read(min(length, buffer_size))
+        if len(buffer) == 0:
+            break
+        to_file.write(buffer)
+        length -= len(buffer)
