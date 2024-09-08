@@ -19,7 +19,11 @@ def _parse_arguments(args):
     )
     argument_parser.add_argument(
         "--torrent-id",
-        help="ID (or hash) of the torrent to delete unwanted files from",
+        help=(
+            "ID (or hash) of the torrent to delete unwanted files from; can be"
+            " specified multiple times"
+        ),
+        action="append",
         required=True,
         default=argparse.SUPPRESS,
     )
@@ -343,15 +347,15 @@ def run(args, run_before_check=lambda: None):
     transmission_url = args.transmission_url
     with transmission_rpc.from_url(transmission_url) as transmission_client:
         download_dir = pathlib.Path(transmission_client.get_session().download_dir)
-        torrent_id = args.torrent_id
-        _process_torrent(
-            transmission_client=transmission_client,
-            torrent_id=torrent_id if len(torrent_id) == 40 else int(torrent_id),
-            download_dir=download_dir,
-            run_before_check=run_before_check,
-            transmission_url=transmission_url,
-            dry_run=getattr(args, "dry_run", False),
-        )
+        for torrent_id in args.torrent_id:
+            _process_torrent(
+                transmission_client=transmission_client,
+                torrent_id=torrent_id if len(torrent_id) == 40 else int(torrent_id),
+                download_dir=download_dir,
+                run_before_check=run_before_check,
+                transmission_url=transmission_url,
+                dry_run=getattr(args, "dry_run", False),
+            )
 
 
 def main():
