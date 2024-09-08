@@ -6,9 +6,9 @@ import transmission_rpc
 def _parse_arguments(args):
     argument_parser = argparse.ArgumentParser(
         description=(
-            "Given a list of file paths (one per line, relative to download_dir) on"
-            " standard input, mark the files as unwanted (do not download) in the"
-            " corresponding Transmission torrent."
+            "Given a list of torrent file names (one per line, including the torrent"
+            " name) on standard input, mark the files as unwanted (do not download) in"
+            " the corresponding Transmission torrent."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )

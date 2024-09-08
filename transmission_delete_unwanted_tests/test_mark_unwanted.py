@@ -61,3 +61,27 @@ def test_unmark(run, setup_torrent, get_files_wanted):
         "test0.txt": True,
         "test1.txt": True,
     }
+
+
+def test_unmark_multiple(run, setup_torrent, get_files_wanted):
+    torrent1 = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(random.randbytes(4)),
+            "test1.txt": TorrentFile(random.randbytes(4)),
+        }
+    )
+    torrent2 = setup_torrent(
+        files={
+            "test0.txt": TorrentFile(random.randbytes(4)),
+            "test1.txt": TorrentFile(random.randbytes(4)),
+        }
+    )
+    run(stdin=f"{torrent1.torf.name}/test1.txt\n{torrent2.torf.name}/test0.txt")
+    assert get_files_wanted(torrent1.transmission.id) == {
+        "test0.txt": True,
+        "test1.txt": False,
+    }
+    assert get_files_wanted(torrent2.transmission.id) == {
+        "test0.txt": False,
+        "test1.txt": True,
+    }
