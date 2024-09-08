@@ -51,30 +51,31 @@ def _fixture_transmission_daemon(tmp_path_factory):
     download_dir = tmp_path / "download"
     download_dir.mkdir()
     rpc_port = find_free_port()
-    daemon_process = subprocess.Popen([
-        "transmission-daemon",
-        "--foreground",
-        "--config-dir",
-        str(config_dir),
-        "--rpc-bind-address",
-        address,
-        "--port",
-        str(rpc_port),
-        "--peerport",
-        str(find_free_port()),
-        "--download-dir",
-        str(download_dir),
-        "--log-level=debug",
-    ])
     try:
-        _try_connect((address, rpc_port))
-        yield f"http://{address}:{rpc_port}"
+        with subprocess.Popen([
+            "transmission-daemon",
+            "--foreground",
+            "--config-dir",
+            str(config_dir),
+            "--rpc-bind-address",
+            address,
+            "--port",
+            str(rpc_port),
+            "--peerport",
+            str(find_free_port()),
+            "--download-dir",
+            str(download_dir),
+            "--log-level=debug",
+        ]) as daemon_process:
+            try:
+                _try_connect((address, rpc_port))
+                yield f"http://{address}:{rpc_port}"
+            finally:
+                # It would be cleaner to ask Transmission to shut itself down, but sadly
+                # transmission_rpc does not support the relevant RPC command:
+                #   https://github.com/trim21/transmission-rpc/issues/483
+                daemon_process.terminate()
     finally:
-        # It would be cleaner to ask Transmission to shut itself down, but sadly
-        # transmission_rpc does not support the relevant RPC command:
-        #   https://github.com/trim21/transmission-rpc/issues/483
-        daemon_process.terminate()
-        daemon_process.wait()
         shutil.rmtree(download_dir)
         shutil.rmtree(config_dir)
 
