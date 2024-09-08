@@ -86,7 +86,8 @@ class _TorrentProcessor:
         self._initially_stopped = torrent.status == transmission_rpc.Status.STOPPED
         print(
             f'>>> PROCESSING TORRENT: "{torrent.name}" (hash: {torrent.info_hash} id:'
-            f" {self._torrent_id})"
+            f" {self._torrent_id})",
+            file=sys.stderr,
         )
 
         total_piece_count = torrent.piece_count
@@ -122,11 +123,12 @@ class _TorrentProcessor:
             " and wanted:"
             f" {self._format_piece_count(self._pieces_present_wanted.count(True))};"
             " present and not wanted:"
-            f" {self._format_piece_count(pieces_present_unwanted_count)}"
+            f" {self._format_piece_count(pieces_present_unwanted_count)}",
+            file=sys.stderr,
         )
 
         if pieces_present_unwanted_count == 0:
-            print("Every downloaded piece is wanted. Nothing to do.")
+            print("Every downloaded piece is wanted. Nothing to do.", file=sys.stderr)
             return
 
         self._stop_torrent()
@@ -224,7 +226,10 @@ class _TorrentProcessor:
             self._remove_file(file_name)
 
     def _trim_file(self, file_name, keep_first_bytes, keep_last_bytes):
-        print(f"{'Would have trimmed' if self._dry_run else 'Trimming'}: {file_name}")
+        print(
+            f"{'Would have trimmed' if self._dry_run else 'Trimming'}: {file_name}",
+            file=sys.stderr,
+        )
         if self._dry_run:
             return
 
@@ -264,7 +269,8 @@ class _TorrentProcessor:
                 return False
             print(
                 f"{'Would have removed' if self._dry_run else 'Removing'}:"
-                f" {file_name_to_delete}"
+                f" {file_name_to_delete}",
+                file=sys.stderr,
             )
             if not self._dry_run:
                 file_path.unlink()
@@ -274,7 +280,7 @@ class _TorrentProcessor:
         # "xxx" *and* another file named "xxx.part", this may end up deleting the
         # wrong file. For now we just accept the risk.
         if not any([delete(file_name), delete(f"{file_name}.part")]):
-            print(f"WARNING: could not find {file_name} to delete")
+            print(f"WARNING: could not find {file_name} to delete", file=sys.stderr)
             return
 
         if not self._dry_run:
@@ -284,7 +290,10 @@ class _TorrentProcessor:
                 parent_dir = parent_dir.parent
 
     def _check_torrent(self):
-        print("All done, kicking off torrent verification. This may take a while...")
+        print(
+            "All done, kicking off torrent verification. This may take a while...",
+            file=sys.stderr,
+        )
         self._transmission_client.verify_torrent(self._torrent_id)
         status = self._wait_for_status(
             lambda status: status
@@ -314,7 +323,7 @@ class _TorrentProcessor:
                 f" {self._transmission_url} --torrent {self._torrent_id} --info"
                 " --info-files --info-pieces`)"
             )
-        print("Torrent verification successful.")
+        print("Torrent verification successful.", file=sys.stderr)
 
     @backoff.on_predicate(
         backoff.expo,
