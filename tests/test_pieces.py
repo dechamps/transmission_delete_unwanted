@@ -75,3 +75,63 @@ def test_to_array_too_long():
 def test_to_array_spurious_bits():
     with pytest.raises(ValueError):
         pieces.to_array(base64.b64encode(bytes([0b00001000])), 4)
+
+
+def test_pieces_wanted_from_files_empty():
+    assert pieces.pieces_wanted_from_files([], [], 1) == []
+
+
+@pytest.mark.parametrize("piece_size", [1, 2, 3])
+def test_pieces_wanted_from_files_unwanted(piece_size):
+    assert pieces.pieces_wanted_from_files([1], [0], piece_size) == [False]
+
+
+@pytest.mark.parametrize("piece_size", [1, 2, 3])
+def test_pieces_wanted_from_files_unwanted_over(piece_size):
+    assert pieces.pieces_wanted_from_files([1], [0], piece_size) == [False]
+
+
+@pytest.mark.parametrize("piece_size", [1, 2, 3])
+def test_pieces_wanted_from_files_wanted(piece_size):
+    assert pieces.pieces_wanted_from_files([1], [1], piece_size) == [True]
+
+
+@pytest.mark.parametrize("piece_size", [1, 2, 3])
+def test_pieces_wanted_from_files_wanted_over(piece_size):
+    assert pieces.pieces_wanted_from_files([1], [1], piece_size) == [True]
+
+
+def test_pieces_wanted_from_files_unwanted2():
+    assert pieces.pieces_wanted_from_files([1, 1], [0, 0], 1) == [False, False]
+
+
+def test_pieces_wanted_from_files_wanted2():
+    assert pieces.pieces_wanted_from_files([1, 1], [1, 1], 1) == [True, True]
+
+
+def test_pieces_wanted_from_files_mixed2():
+    assert pieces.pieces_wanted_from_files([1, 1], [1, 0], 1) == [True, False]
+    assert pieces.pieces_wanted_from_files([1, 1], [0, 1], 1) == [False, True]
+
+
+@pytest.mark.parametrize("piece_size", [2, 3, 4])
+def test_pieces_wanted_from_files_onepiece_multifile_wanted(piece_size):
+    assert pieces.pieces_wanted_from_files([1, 1], [1, 1], piece_size) == [True]
+
+
+@pytest.mark.parametrize("piece_size", [2, 3, 4])
+def test_pieces_wanted_from_files_onepiece_multifile_unwanted(piece_size):
+    assert pieces.pieces_wanted_from_files([1, 1], [0, 0], piece_size) == [False]
+
+
+@pytest.mark.parametrize("piece_size", [2, 3, 4])
+def test_pieces_wanted_from_files_onepiece_multifile_mix(piece_size):
+    assert pieces.pieces_wanted_from_files([1, 1], [0, 1], piece_size) == [True]
+    assert pieces.pieces_wanted_from_files([1, 1], [1, 0], piece_size) == [True]
+
+
+def test_pieces_wanted_from_files_multipiece():
+    assert pieces.pieces_wanted_from_files([3, 1], [0, 1], 2) == [False, True]
+    assert pieces.pieces_wanted_from_files([3, 1], [1, 0], 2) == [True, True]
+    assert pieces.pieces_wanted_from_files([1, 3], [0, 1], 2) == [True, True]
+    assert pieces.pieces_wanted_from_files([1, 3], [1, 0], 2) == [True, False]

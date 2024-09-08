@@ -117,28 +117,6 @@ def _trim_torrent_file(
         new_file_path.unlink(missing_ok=True)
 
 
-def _compute_pieces_wanted(files, files_wanted, piece_size):
-    pieces_wanted = [None] * -(-sum(file["length"] for file in files) // piece_size)
-    current_offset = 0
-    for file, file_wanted in zip(files, files_wanted):
-        assert file_wanted in (0, 1)
-        file_length = file["length"]
-        # Compute piece boundaries. Note we can't use file["beginPiece"] and
-        # file["endPiece"] for this because these are new fields that the
-        # Transmission server may be too old to support.
-        for piece_index in range(
-            current_offset // piece_size,
-            -(-(current_offset + file_length) // piece_size),
-        ):
-            # The value for that piece may already have been set by the previous
-            # file, due to unaligned piece/file boundaries. In this case, a piece
-            # is wanted if it overlaps with any wanted file.
-            pieces_wanted[piece_index] = pieces_wanted[piece_index] or file_wanted
-        current_offset += file_length
-    assert all(wanted_piece is not None for wanted_piece in pieces_wanted)
-    return pieces_wanted
-
-
 class ScriptException(Exception):
     pass
 
@@ -176,10 +154,10 @@ def _process_torrent(
     )
 
     total_piece_count = torrent.piece_count
-    pieces_wanted = _compute_pieces_wanted(
+    pieces_wanted = pieces.pieces_wanted_from_files(
         # Note we use torrent.fields["files"], not torrent.get_files(), to work around
         # https://github.com/trim21/transmission-rpc/issues/455
-        torrent.fields["files"],
+        [file["length"] for file in torrent.fields["files"]],
         torrent.wanted,
         torrent.piece_size,
     )
