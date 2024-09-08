@@ -170,3 +170,20 @@ def _fixture_setup_torrent(transmission_client, verify_torrent):
         transmission_client.remove_torrent(transmission_torrent_ids)
     for path in paths:
         shutil.rmtree(path)
+
+
+@pytest.fixture(name="get_files_wanted")
+def _fixture_get_files_wanted(transmission_client):
+    def get_files_wanted(torrent_id):
+        torrent_info = transmission_client.get_torrent(
+            torrent_id, arguments=["name", "files", "wanted"]
+        )
+        torrent_name = torrent_info.name
+        return {
+            _removeprefix(file["name"], f"{torrent_name}/"): wanted
+            for file, wanted in zip(
+                torrent_info.fields["files"], torrent_info.wanted, strict=True
+            )
+        }
+
+    return get_files_wanted
