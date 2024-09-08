@@ -2,7 +2,7 @@ class CopyException(Exception):
     pass
 
 
-class EOFException(Exception):
+class EOFException(CopyException):
     pass
 
 
