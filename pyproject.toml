@@ -51,7 +51,7 @@ disable = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = "tests"
+testpaths = "transmission_delete_unwanted_tests"
 addopts = [
     "--import-mode=importlib",
     "--numprocesses=auto",
