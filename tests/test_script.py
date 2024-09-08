@@ -244,6 +244,10 @@ def _fixture_run_with_torrent(request, run):
 
 
 def _check_file_tree(root, files_contents):
+    files_contents = {
+        root / file_name: file_content
+        for file_name, file_content in files_contents.items()
+    }
     for directory_path, _, file_names in root.walk():
         for file_name in file_names:
             file_path = directory_path / file_name
@@ -500,10 +504,7 @@ def test_delete_aligned(
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
-        {
-            torrent.path / "test0.txt": test0contents,
-            torrent.path / "test2.txt": test2contents,
-        },
+        {"test0.txt": test0contents, "test2.txt": test2contents},
     )
     verify_torrent(torrent.transmission.id)
     assert_torrent_status(
@@ -565,10 +566,7 @@ def test_delete_aligned_incomplete(
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
-        {
-            torrent.path / "test0.txt": test0contents,
-            torrent.path / "test2.txt": test2contents,
-        },
+        {"test0.txt": test0contents, "test2.txt": test2contents},
     )
     verify_torrent(torrent.transmission.id)
     assert_torrent_status(
@@ -600,11 +598,8 @@ def test_trim_beginaligned(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path
-            / "test0.txt.part": (
-                b"\x00" * _MIN_PIECE_SIZE + test0contents[-shift_bytes:]
-            ),
-            torrent.path / "test1.txt": test1contents,
+            "test0.txt.part": b"\x00" * _MIN_PIECE_SIZE + test0contents[-shift_bytes:],
+            "test1.txt": test1contents,
         },
     )
     verify_torrent(torrent.transmission.id)
@@ -658,10 +653,7 @@ def test_trim_endaligned(
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
-        {
-            torrent.path / "test0.txt": test0contents,
-            torrent.path / "test1.txt.part": test1contents[:shift_bytes],
-        },
+        {"test0.txt": test0contents, "test1.txt.part": test1contents[:shift_bytes]},
     )
     verify_torrent(torrent.transmission.id)
     assert_torrent_status(
@@ -699,14 +691,13 @@ def test_trim_unaligned(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "test0.txt": test0contents,
-            torrent.path
-            / "test1.txt.part": (
+            "test0.txt": test0contents,
+            "test1.txt.part": (
                 test1contents[: _MIN_PIECE_SIZE - left_shift_bytes]
                 + b"\x00" * _MIN_PIECE_SIZE
                 + test1contents[-(_MIN_PIECE_SIZE - right_shift_bytes) :]
             ),
-            torrent.path / "test2.txt": test2contents,
+            "test2.txt": test2contents,
         },
     )
     verify_torrent(torrent.transmission.id)
@@ -771,10 +762,7 @@ def test_trim_unaligned_incomplete(
     _check_file_tree(
         torrent.path,
         (
-            {
-                torrent.path / "test0.txt": test0contents,
-                torrent.path / "test2.txt": test2contents,
-            }
+            {"test0.txt": test0contents, "test2.txt": test2contents}
             | (
                 # Given the middle piece is unwanted, if both the first piece and the
                 # last piece are incomplete, then there are no valid wanted pieces left
@@ -783,8 +771,7 @@ def test_trim_unaligned_incomplete(
                 if incomplete_first_piece and incomplete_last_piece
                 else {
                     # Otherwise, we should only find data for the valid, wanted pieces.
-                    torrent.path
-                    / "test1.txt.part": (
+                    "test1.txt.part": (
                         b"\x00" * (_MIN_PIECE_SIZE - left_shift_bytes)
                         if incomplete_first_piece
                         else test1contents[: _MIN_PIECE_SIZE - left_shift_bytes]
@@ -839,10 +826,7 @@ def test_delete_directory(
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
-        {
-            torrent.path / "subdir0/test0.txt": test0contents,
-            torrent.path / "subdir2/test2.txt": test2contents,
-        },
+        {"subdir0/test0.txt": test0contents, "subdir2/test2.txt": test2contents},
     )
     assert not directory_to_delete.exists()
     verify_torrent(torrent.transmission.id)
@@ -878,8 +862,8 @@ def test_delete_directories(
     _check_file_tree(
         torrent.path,
         {
-            torrent.path / "subdir0/subsubdir0/test0.txt": test0contents,
-            torrent.path / "subdir2/subsubdir2/test2.txt": test2contents,
+            "subdir0/subsubdir0/test0.txt": test0contents,
+            "subdir2/subsubdir2/test2.txt": test2contents,
         },
     )
     assert not directory_to_delete.exists()
@@ -912,10 +896,7 @@ def test_delete_part(
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
-        {
-            torrent.path / "test0.txt": test0contents,
-            torrent.path / "test2.txt": test2contents,
-        },
+        {"test0.txt": test0contents, "test2.txt": test2contents},
     )
     verify_torrent(torrent.transmission.id)
     assert_torrent_status(
@@ -1145,18 +1126,15 @@ def test_multiple_torrents(
     )
     _check_file_tree(
         torrent0.path,
-        {torrent0.path / "test00.txt": test00contents},
+        {"test00.txt": test00contents},
     )
     _check_file_tree(
         torrent1.path,
-        {torrent1.path / "test11.txt": test11contents},
+        {"test11.txt": test11contents},
     )
     _check_file_tree(
         torrent2.path,
-        {
-            torrent2.path / "test20.txt": test20contents,
-            torrent2.path / "test21.txt": test21contents,
-        },
+        {"test20.txt": test20contents, "test21.txt": test21contents},
     )
     verify_torrent(torrent0.transmission.id)
     verify_torrent(torrent1.transmission.id)
