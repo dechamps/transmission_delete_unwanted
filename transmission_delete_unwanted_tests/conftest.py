@@ -114,7 +114,7 @@ def _fixture_setup_torrent(transmission_client, verify_torrent):
 
     def create_torrent(
         files,
-        piece_size,
+        piece_size=16384,
         before_add=None,
     ):
         path = pathlib.Path(download_dir) / f"test_torrent_{uuid.uuid4()}"
