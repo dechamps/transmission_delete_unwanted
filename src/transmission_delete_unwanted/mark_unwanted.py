@@ -21,35 +21,44 @@ def _parse_arguments(args):
 
 
 def _mark_unwanted(transmission_client):
-    torrents = transmission_client.get_torrents(arguments=["id", "name", "files"])
+    torrents = transmission_client.get_torrents(arguments=["infohash", "name", "files"])
     # Note we use torrent.fields["files"], not torrent.get_files(), to work around
     # https://github.com/trim21/transmission-rpc/issues/455
     #
     # TODO: this could be made more memory-efficient by using two levels of nested
     # dicts.
-    torrent_id_and_file_id_by_file_name = {
-        file["name"]: (torrent.id, file_id)
+    torrent_info_hash_and_file_id_by_file_name = {
+        file["name"]: (torrent.info_hash, file_id)
         for torrent in torrents
         for file_id, file in enumerate(torrent.fields["files"])
     }
 
     missing = False
-    unwanted_file_ids_by_torrent_id = {}
+    unwanted_file_ids_by_torrent_info_hash = {}
     for file_name in (line.rstrip("\r\n") for line in sys.stdin):
         if len(file_name) == 0:
             continue
 
-        torrent_id_and_file_id = torrent_id_and_file_id_by_file_name.get(file_name)
-        if torrent_id_and_file_id is None:
+        torrent_info_hash_and_file_id = torrent_info_hash_and_file_id_by_file_name.get(
+            file_name
+        )
+        if torrent_info_hash_and_file_id is None:
             print(f"WARNING: file not found in torrents: {file_name}", file=sys.stderr)
             missing = True
             continue
 
-        torrent_id, file_id = torrent_id_and_file_id
-        unwanted_file_ids_by_torrent_id.setdefault(torrent_id, []).append(file_id)
+        torrent_info_hash, file_id = torrent_info_hash_and_file_id
+        unwanted_file_ids_by_torrent_info_hash.setdefault(torrent_info_hash, []).append(
+            file_id
+        )
 
-    for torrent_id, unwanted_file_ids in unwanted_file_ids_by_torrent_id.items():
-        transmission_client.change_torrent(torrent_id, files_unwanted=unwanted_file_ids)
+    for (
+        torrent_info_hash,
+        unwanted_file_ids,
+    ) in unwanted_file_ids_by_torrent_info_hash.items():
+        transmission_client.change_torrent(
+            torrent_info_hash, files_unwanted=unwanted_file_ids
+        )
 
     return not missing
 

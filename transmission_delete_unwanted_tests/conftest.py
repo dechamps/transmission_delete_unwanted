@@ -110,7 +110,7 @@ def _fixture_setup_torrent(transmission_client, verify_torrent):
     download_dir = transmission_client.get_session().download_dir
 
     paths = []
-    transmission_torrent_ids = []
+    transmission_torrent_info_hashes = []
 
     def create_torrent(
         files,
@@ -128,6 +128,7 @@ def _fixture_setup_torrent(transmission_client, verify_torrent):
         torf_torrent = torf.Torrent(path=path, piece_size=piece_size, private=True)
         torf_torrent.generate()
         torf_torrent._path = None  # https://github.com/rndusr/torf/issues/46 pylint:disable=protected-access
+        info_hash = torf_torrent.infohash
 
         if before_add is not None:
             before_add(path)
@@ -137,26 +138,21 @@ def _fixture_setup_torrent(transmission_client, verify_torrent):
             for file_index, file in enumerate(torf_torrent.files)
             if not files[_removeprefix(str(file), f"{torf_torrent.name}/")].wanted
         ]
+        transmission_torrent_info_hashes.append(info_hash)
         transmission_torrent = transmission_client.add_torrent(
             torf_torrent.dump(), files_unwanted=unwanted_files
         )
-        transmission_torrent_ids.append(transmission_torrent.id)
 
         transmission_info = transmission_client.get_torrent(
-            transmission_torrent.id,
-            arguments=[
-                "hashString",
-                "wanted",
-            ],
+            info_hash, arguments=["wanted"]
         )
-        assert transmission_info.info_hash == torf_torrent.infohash
 
         files_wanted = [True] * len(torf_torrent.files)
         for unwanted_file_index in unwanted_files:
             files_wanted[unwanted_file_index] = False
         assert transmission_info.wanted == files_wanted
 
-        verify_torrent(transmission_torrent.id, request=False)
+        verify_torrent(info_hash, request=False)
 
         return Torrent(
             path=path,
@@ -166,8 +162,8 @@ def _fixture_setup_torrent(transmission_client, verify_torrent):
 
     yield create_torrent
 
-    if len(transmission_torrent_ids) > 0:
-        transmission_client.remove_torrent(transmission_torrent_ids)
+    if len(transmission_torrent_info_hashes) > 0:
+        transmission_client.remove_torrent(transmission_torrent_info_hashes)
     for path in paths:
         shutil.rmtree(path)
 

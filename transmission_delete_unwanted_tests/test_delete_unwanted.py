@@ -66,7 +66,7 @@ def _fixture_run_with_torrent(request, run):
     return lambda torrent, *kargs, **kwargs: run(
         "--torrent-id",
         {
-            _TorrentIdKind.TRANSMISSION_ID: str(torrent.transmission.id),
+            _TorrentIdKind.TRANSMISSION_ID: str(torrent.torf.infohash),
             _TorrentIdKind.HASH: torrent.torf.infohash,
         }[request.param],
         *kargs,
@@ -102,10 +102,10 @@ def test_noop_onefile_onepiece(
         files={"test.txt": TorrentFile(random.randbytes(4))}, piece_size=_MIN_PIECE_SIZE
     )
     assert torrent.torf.pieces == 1
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
-    verify_torrent(torrent.transmission.id)
-    assert_torrent_status(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
+    assert_torrent_status(torrent.torf.infohash)
 
 
 def test_noop_multifile_onepiece(
@@ -123,10 +123,10 @@ def test_noop_multifile_onepiece(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 1
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
-    verify_torrent(torrent.transmission.id)
-    assert_torrent_status(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
+    assert_torrent_status(torrent.torf.infohash)
 
 
 def test_noop_multifile_onepiece_unwanted(
@@ -144,10 +144,10 @@ def test_noop_multifile_onepiece_unwanted(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 1
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
-    verify_torrent(torrent.transmission.id)
-    assert_torrent_status(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
+    assert_torrent_status(torrent.torf.infohash)
 
 
 def test_noop_onefile_multipiece(
@@ -161,10 +161,10 @@ def test_noop_onefile_multipiece(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 4
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
-    verify_torrent(torrent.transmission.id)
-    assert_torrent_status(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
+    assert_torrent_status(torrent.torf.infohash)
 
 
 def test_noop_multifile_multipiece_aligned(
@@ -182,10 +182,10 @@ def test_noop_multifile_multipiece_aligned(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 3
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
-    verify_torrent(torrent.transmission.id)
-    assert_torrent_status(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
+    assert_torrent_status(torrent.torf.infohash)
 
 
 def test_noop_multifile_multipiece_aligned_incomplete(
@@ -207,14 +207,14 @@ def test_noop_multifile_multipiece_aligned_incomplete(
 
     def check_torrent_status():
         assert_torrent_status(
-            torrent.transmission.id,
+            torrent.torf.infohash,
             expect_completed=False,
             expect_pieces=[True, False, True],
         )
 
     check_torrent_status()
     run_with_torrent(torrent)
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     check_torrent_status()
 
 
@@ -237,14 +237,14 @@ def test_noop_multifile_multipiece_aligned_incomplete_unwanted(
 
     def check_torrent_status():
         assert_torrent_status(
-            torrent.transmission.id,
+            torrent.torf.infohash,
             expect_completed=True,
             expect_pieces=[True, False, True],
         )
 
     check_torrent_status()
     run_with_torrent(torrent)
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     check_torrent_status()
 
 
@@ -269,14 +269,14 @@ def test_noop_multifile_multipiece_unaligned_incomplete(
 
     def check_torrent_status():
         assert_torrent_status(
-            torrent.transmission.id,
+            torrent.torf.infohash,
             expect_completed=False,
             expect_pieces=[True, False, False, True],
         )
 
     check_torrent_status()
     run_with_torrent(torrent)
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     check_torrent_status()
 
 
@@ -301,7 +301,7 @@ def test_noop_multifile_multipiece_unaligned_incomplete_unwanted(
 
     def check_torrent_status():
         assert_torrent_status(
-            torrent.transmission.id,
+            torrent.torf.infohash,
             expect_completed=False,
             expect_pieces=[True, False, False, True],
         )
@@ -310,7 +310,7 @@ def test_noop_multifile_multipiece_unaligned_incomplete_unwanted(
     # Should be a no-op because there is no piece that doesn't overlap with a wanted
     # file.
     run_with_torrent(torrent)
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     check_torrent_status()
 
 
@@ -331,15 +331,15 @@ def test_delete_aligned(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 3
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {"test0.txt": test0contents, "test2.txt": test2contents},
     )
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[True, False, True],
     )
 
@@ -359,10 +359,10 @@ def test_delete_dryrun(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 3
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent, "--dry-run")
-    verify_torrent(torrent.transmission.id)
-    assert_torrent_status(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
+    assert_torrent_status(torrent.torf.infohash)
 
 
 def test_delete_aligned_incomplete(
@@ -391,7 +391,7 @@ def test_delete_aligned_incomplete(
     )
     assert torrent.torf.pieces == 5
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[True, True, False, True, True],
     )
     run_with_torrent(torrent)
@@ -399,9 +399,9 @@ def test_delete_aligned_incomplete(
         torrent.path,
         {"test0.txt": test0contents, "test2.txt": test2contents},
     )
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[True, False, False, False, True],
     )
 
@@ -424,7 +424,7 @@ def test_trim_beginaligned(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 2
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
@@ -433,9 +433,9 @@ def test_trim_beginaligned(
             "test1.txt": test1contents,
         },
     )
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[False, True],
     )
 
@@ -456,10 +456,10 @@ def test_trim_dryrun(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 2
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent, "--dry-run")
-    verify_torrent(torrent.transmission.id)
-    assert_torrent_status(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
+    assert_torrent_status(torrent.torf.infohash)
 
 
 @pytest.mark.parametrize("shift_bytes", [1, _MIN_PIECE_SIZE // 2, _MIN_PIECE_SIZE - 1])
@@ -480,15 +480,15 @@ def test_trim_endaligned(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 2
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {"test0.txt": test0contents, "test1.txt.part": test1contents[:shift_bytes]},
     )
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[True, False],
     )
 
@@ -517,7 +517,7 @@ def test_trim_unaligned(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 5
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
@@ -531,9 +531,9 @@ def test_trim_unaligned(
             "test2.txt": test2contents,
         },
     )
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[True, True, False, True, True],
     )
 
@@ -579,7 +579,7 @@ def test_trim_unaligned_incomplete(
     )
     assert torrent.torf.pieces == 5
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_completed=False,
         expect_pieces=[
             True,
@@ -618,9 +618,9 @@ def test_trim_unaligned_incomplete(
             )
         ),
     )
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_completed=False,
         expect_pieces=[
             True,
@@ -651,7 +651,7 @@ def test_delete_directory(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 3
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     directory_to_delete = torrent.path / "subdir1"
     assert directory_to_delete.exists()
     run_with_torrent(torrent)
@@ -660,9 +660,9 @@ def test_delete_directory(
         {"subdir0/test0.txt": test0contents, "subdir2/test2.txt": test2contents},
     )
     assert not directory_to_delete.exists()
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[True, False, True],
     )
 
@@ -686,7 +686,7 @@ def test_delete_directories(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 3
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     directory_to_delete = torrent.path / "subdir1"
     assert directory_to_delete.exists()
     run_with_torrent(torrent)
@@ -698,9 +698,9 @@ def test_delete_directories(
         },
     )
     assert not directory_to_delete.exists()
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[True, False, True],
     )
 
@@ -723,15 +723,15 @@ def test_delete_part(
         before_add=lambda path: (path / "test1.txt").rename(path / "test1.txt.part"),
     )
     assert torrent.torf.pieces == 3
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
     run_with_torrent(torrent)
     _check_file_tree(
         torrent.path,
         {"test0.txt": test0contents, "test2.txt": test2contents},
     )
-    verify_torrent(torrent.transmission.id)
+    verify_torrent(torrent.torf.infohash)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[True, False, True],
     )
 
@@ -748,7 +748,7 @@ def test_verify(
         },
         piece_size=_MIN_PIECE_SIZE,
     )
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
 
     def corrupt():
         with open(torrent.path / "test0.txt", "wb") as file:
@@ -772,7 +772,7 @@ def test_verify_dryrun(
         },
         piece_size=_MIN_PIECE_SIZE,
     )
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
 
     def corrupt():
         with open(torrent.path / "test0.txt", "wb") as file:
@@ -780,7 +780,7 @@ def test_verify_dryrun(
 
     run_with_torrent(torrent, "--dry-run", run_before_check=corrupt)
 
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
 
 
 def test_stop(
@@ -796,19 +796,19 @@ def test_stop(
         },
         piece_size=_MIN_PIECE_SIZE,
     )
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
 
     def check_stopped():
         assert (
             transmission_client.get_torrent(
-                torrent.transmission.id, arguments=["status"]
+                torrent.torf.infohash, arguments=["status"]
             ).status
             == transmission_rpc.Status.STOPPED
         )
 
     run_with_torrent(torrent, run_before_check=check_stopped)
     assert_torrent_status(
-        torrent.transmission.id,
+        torrent.torf.infohash,
         expect_pieces=[True, False],
     )
 
@@ -826,12 +826,12 @@ def test_stop_dryrun(
         },
         piece_size=_MIN_PIECE_SIZE,
     )
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
 
     def check_not_stopped():
         assert (
             transmission_client.get_torrent(
-                torrent.transmission.id, arguments=["status"]
+                torrent.torf.infohash, arguments=["status"]
             ).status
             != transmission_rpc.Status.STOPPED
         )
@@ -857,14 +857,14 @@ def test_stays_stopped(
         },
         piece_size=_MIN_PIECE_SIZE,
     )
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
 
-    transmission_client.stop_torrent(torrent.transmission.id)
+    transmission_client.stop_torrent(torrent.torf.infohash)
 
     def is_stopped():
         return (
             transmission_client.get_torrent(
-                torrent.transmission.id, arguments=["status"]
+                torrent.torf.infohash, arguments=["status"]
             ).status
             == transmission_rpc.Status.STOPPED
         )
@@ -895,7 +895,7 @@ def test_verify_on_error(
         piece_size=_MIN_PIECE_SIZE,
     )
     assert torrent.torf.pieces == 2
-    assert_torrent_status(torrent.transmission.id)
+    assert_torrent_status(torrent.torf.infohash)
 
     class TestException(Exception):
         pass
@@ -905,9 +905,9 @@ def test_verify_on_error(
 
     with pytest.raises(TestException):
         run_with_torrent(torrent, run_before_check=raise_test_exception)
-    verify_torrent(torrent.transmission.id, request=False)
+    verify_torrent(torrent.torf.infohash, request=False)
     transmission_info = transmission_client.get_torrent(
-        torrent.transmission.id, arguments=["status", "pieces"]
+        torrent.torf.infohash, arguments=["status", "pieces"]
     )
     assert transmission_info.status == transmission_rpc.Status.STOPPED
     # The script should have kicked off verification despite the error, so Transmission
@@ -948,14 +948,14 @@ def test_multiple_torrents(
         },
         piece_size=_MIN_PIECE_SIZE,
     )
-    assert_torrent_status(torrent0.transmission.id)
-    assert_torrent_status(torrent1.transmission.id)
-    assert_torrent_status(torrent2.transmission.id)
+    assert_torrent_status(torrent0.torf.infohash)
+    assert_torrent_status(torrent1.torf.infohash)
+    assert_torrent_status(torrent2.torf.infohash)
     run(
         "--torrent-id",
-        str(torrent0.transmission.id),
+        str(torrent0.torf.infohash),
         "--torrent-id",
-        str(torrent1.transmission.id),
+        str(torrent1.torf.infohash),
     )
     _check_file_tree(
         torrent0.path,
@@ -969,9 +969,9 @@ def test_multiple_torrents(
         torrent2.path,
         {"test20.txt": test20contents, "test21.txt": test21contents},
     )
-    verify_torrent(torrent0.transmission.id)
-    verify_torrent(torrent1.transmission.id)
-    verify_torrent(torrent2.transmission.id)
+    verify_torrent(torrent0.torf.infohash)
+    verify_torrent(torrent1.torf.infohash)
+    verify_torrent(torrent2.torf.infohash)
 
 
 def test_all_torrents(
@@ -1005,9 +1005,9 @@ def test_all_torrents(
         },
         piece_size=_MIN_PIECE_SIZE,
     )
-    assert_torrent_status(torrent0.transmission.id)
-    assert_torrent_status(torrent1.transmission.id)
-    assert_torrent_status(torrent2.transmission.id)
+    assert_torrent_status(torrent0.torf.infohash)
+    assert_torrent_status(torrent1.torf.infohash)
+    assert_torrent_status(torrent2.torf.infohash)
     run()
     _check_file_tree(
         torrent0.path,
@@ -1021,6 +1021,6 @@ def test_all_torrents(
         torrent2.path,
         {"test20.txt": test20contents, "test21.txt": test21contents},
     )
-    verify_torrent(torrent0.transmission.id)
-    verify_torrent(torrent1.transmission.id)
-    verify_torrent(torrent2.transmission.id)
+    verify_torrent(torrent0.torf.infohash)
+    verify_torrent(torrent1.torf.infohash)
+    verify_torrent(torrent2.torf.infohash)

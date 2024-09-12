@@ -20,7 +20,7 @@ def _parse_arguments(args):
     argument_parser.add_argument(
         "--torrent-id",
         help=(
-            "ID (or hash) of the torrent to delete unwanted files from; can be"
+            "ID or info hash of the torrent to delete unwanted files from; can be"
             " specified multiple times (default: all torrents)"
         ),
         action="append",
@@ -56,7 +56,7 @@ class _TorrentProcessor:
     def __init__(
         self,
         transmission_client,
-        torrent_id,
+        torrent_info_hash,
         download_dir,
         run_before_check,
         transmission_url,
@@ -68,7 +68,7 @@ class _TorrentProcessor:
         self._dry_run = dry_run
 
         torrent = transmission_client.get_torrent(
-            torrent_id,
+            torrent_info_hash,
             arguments=[
                 "id",
                 "infohash",
@@ -81,12 +81,12 @@ class _TorrentProcessor:
                 "status",
             ],
         )
-        self._torrent_id = torrent.id
+        self._info_hash = torrent.info_hash
         self._piece_size = torrent.piece_size
         self._initially_stopped = torrent.status == transmission_rpc.Status.STOPPED
         print(
             f'>>> PROCESSING TORRENT: "{torrent.name}" (hash: {torrent.info_hash} id:'
-            f" {self._torrent_id})",
+            f" {self._info_hash})",
             file=sys.stderr,
         )
 
@@ -151,13 +151,13 @@ class _TorrentProcessor:
             # changed. Otherwise the risk is the user may just resume the torrent and start
             # serving corrupt pieces.
             if not dry_run:
-                transmission_client.verify_torrent(torrent_id)
+                transmission_client.verify_torrent(torrent_info_hash)
             raise
 
         if not dry_run:
             self._check_torrent()
             if not self._initially_stopped:
-                transmission_client.start_torrent(self._torrent_id)
+                transmission_client.start_torrent(self._info_hash)
 
     def _stop_torrent(self):
         if self._initially_stopped or self._dry_run:
@@ -166,7 +166,7 @@ class _TorrentProcessor:
         # Stop the torrent before we make any changes. We don't want to risk
         # Transmission serving deleted pieces that it thinks are still there. It is only
         # safe to resume the torrent after a completed verification (hash check).
-        self._transmission_client.stop_torrent(self._torrent_id)
+        self._transmission_client.stop_torrent(self._info_hash)
         # Transmission does not stop torrents synchronously, so wait for the torrent to
         # transition to the stopped state. Hopefully Transmission will not attempt to
         # read from the torrent files after that point.
@@ -294,7 +294,7 @@ class _TorrentProcessor:
             "All done, kicking off torrent verification. This may take a while...",
             file=sys.stderr,
         )
-        self._transmission_client.verify_torrent(self._torrent_id)
+        self._transmission_client.verify_torrent(self._info_hash)
         status = self._wait_for_status(
             lambda status: status
             not in (
@@ -304,7 +304,7 @@ class _TorrentProcessor:
         )
         assert status == transmission_rpc.Status.STOPPED
         torrent = self._transmission_client.get_torrent(
-            self._torrent_id, arguments=["pieces"]
+            self._info_hash, arguments=["pieces"]
         )
         lost_pieces_count = sum(
             piece_present_wanted_previously and not piece_present_now
@@ -320,7 +320,7 @@ class _TorrentProcessor:
                 f" {self._format_piece_count(lost_pieces_count)} that were previously"
                 " valid and wanted :( This should never happen, please report this as"
                 " a bug (make sure to attach the output of `transmission-remote"
-                f" {self._transmission_url} --torrent {self._torrent_id} --info"
+                f" {self._transmission_url} --torrent {self._info_hash} --info"
                 " --info-files --info-pieces`)"
             )
         print("Torrent verification successful.", file=sys.stderr)
@@ -333,7 +333,7 @@ class _TorrentProcessor:
     )
     def _wait_for_status(self, status_predicate):
         status = self._transmission_client.get_torrent(
-            self._torrent_id, arguments=["status"]
+            self._info_hash, arguments=["status"]
         ).status
         return status if status_predicate(status) else None
 
@@ -354,10 +354,12 @@ def run(args, run_before_check=lambda: None):
         download_dir = pathlib.Path(transmission_client.get_session().download_dir)
 
         torrent_ids = getattr(args, "torrent_id", [])
-        for torrent_id in (
+        for torrent_info_hash in (
             (
-                torrent_info.id
-                for torrent_info in transmission_client.get_torrents(arguments=["id"])
+                torrent_info.info_hash
+                for torrent_info in transmission_client.get_torrents(
+                    arguments=["infohash"]
+                )
             )
             if len(torrent_ids) == 0
             else (
@@ -367,7 +369,7 @@ def run(args, run_before_check=lambda: None):
         ):
             _TorrentProcessor(
                 transmission_client=transmission_client,
-                torrent_id=torrent_id,
+                torrent_info_hash=torrent_info_hash,
                 download_dir=download_dir,
                 run_before_check=run_before_check,
                 transmission_url=transmission_url,
