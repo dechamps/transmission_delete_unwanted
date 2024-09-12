@@ -33,3 +33,16 @@ jobs:
           name: wheel
           path: dist/transmission_delete_unwanted-*.whl
           if-no-files-found: error
+  pytest:
+    runs-on: ubuntu-latest
+    needs: build-wheel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel
+      - run: python -m venv .venv
+      - run: .venv/bin/pip install transmission_delete_unwanted-*.whl
+      - run: .venv/bin/pip install --requirement pytest-requirements.txt
+      - run: sudo apt-get install --yes transmission-daemon
+      - run: .venv/bin/pytest

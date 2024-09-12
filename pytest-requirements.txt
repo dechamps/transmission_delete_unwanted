@@ -4,35 +4,21 @@
 #
 #    pip-compile --strip-extras dev-requirements.in
 #
-astroid==3.2.4
-    # via pylint
-dill==0.3.8
-    # via pylint
 execnet==2.1.1
     # via pytest-xdist
 flatbencode==0.2.1
     # via torf
 iniconfig==2.0.0
     # via pytest
-isort==5.13.2
-    # via pylint
-mccabe==0.7.0
-    # via pylint
 packaging==24.1
     # via pytest
-platformdirs==4.3.1
-    # via pylint
 pluggy==1.5.0
     # via pytest
-pylint==3.2.7
-    # via -r dev-requirements.in
-pytest==8.3.2
+pytest==8.3.3
     # via
     #   -r dev-requirements.in
     #   pytest-xdist
 pytest-xdist==3.6.1
     # via -r dev-requirements.in
-tomlkit==0.13.2
-    # via pylint
 torf==4.2.7
     # via -r dev-requirements.in

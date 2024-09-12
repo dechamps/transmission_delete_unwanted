@@ -1,5 +1,7 @@
 import enum
+import pathlib
 import random
+import os
 import pytest
 import transmission_rpc
 from transmission_delete_unwanted_tests.conftest import TorrentFile, poll_until
@@ -79,9 +81,9 @@ def _check_file_tree(root, files_contents):
         root / file_name: file_content
         for file_name, file_content in files_contents.items()
     }
-    for directory_path, _, file_names in root.walk():
+    for directory_path, _, file_names in os.walk(root):
         for file_name in file_names:
-            file_path = directory_path / file_name
+            file_path = pathlib.Path(directory_path) / file_name
             file_contents = files_contents.get(file_path)
             assert file_contents is not None, f"Did not expect to find {file_path}"
             del files_contents[file_path]

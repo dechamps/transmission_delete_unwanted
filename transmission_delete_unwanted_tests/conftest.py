@@ -61,7 +61,7 @@ def _fixture_transmission_daemon(tmp_path_factory):
             str(_find_free_port()),
             "--download-dir",
             str(download_dir),
-            "--log-level=debug",
+            "--log-debug",
         ]) as daemon_process:
             try:
                 _try_connect((address, rpc_port))
