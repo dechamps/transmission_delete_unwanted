@@ -94,7 +94,10 @@ def _fixture_verify_torrent(transmission_client):
             lambda: transmission_client.get_torrent(
                 torrent_id, arguments=["status"]
             ).status
-            != transmission_rpc.Status.CHECKING
+            not in (
+                transmission_rpc.Status.CHECKING,
+                transmission_rpc.Status.CHECK_PENDING,
+            )
         )
 
     return verify_torrent
