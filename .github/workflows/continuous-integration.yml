@@ -34,6 +34,10 @@ jobs:
           path: dist/transmission_delete_unwanted-*.whl
           if-no-files-found: error
   pytest:
+    strategy:
+      matrix:
+        python_version: ["3.9", "3.12"]
+      fail-fast: false
     runs-on: ubuntu-latest
     needs: build-wheel
     steps:
@@ -41,6 +45,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: wheel
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python_version }}
       - run: python -m venv .venv
       - run: .venv/bin/pip install transmission_delete_unwanted-*.whl
       - run: .venv/bin/pip install --requirement pytest-requirements.txt

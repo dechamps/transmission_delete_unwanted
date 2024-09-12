@@ -180,9 +180,7 @@ def _fixture_get_files_wanted(transmission_client):
         torrent_name = torrent_info.name
         return {
             _removeprefix(file["name"], f"{torrent_name}/"): wanted
-            for file, wanted in zip(
-                torrent_info.fields["files"], torrent_info.wanted, strict=True
-            )
+            for file, wanted in zip(torrent_info.fields["files"], torrent_info.wanted)
         }
 
     return get_files_wanted

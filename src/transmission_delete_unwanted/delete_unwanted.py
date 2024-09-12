@@ -102,13 +102,7 @@ class _TorrentProcessor:
         pieces_present = pieces.to_array(torrent.pieces, total_piece_count)
         assert len(pieces_present) == total_piece_count
 
-        pieces_wanted_present = list(
-            zip(
-                self._pieces_wanted,
-                pieces_present,
-                strict=True,
-            )
-        )
+        pieces_wanted_present = list(zip(self._pieces_wanted, pieces_present))
         self._pieces_present_wanted = [
             present and wanted for wanted, present in pieces_wanted_present
         ]
@@ -311,7 +305,6 @@ class _TorrentProcessor:
             for piece_present_wanted_previously, piece_present_now in zip(
                 self._pieces_present_wanted,
                 pieces.to_array(torrent.pieces, len(self._pieces_present_wanted)),
-                strict=True,
             )
         )
         if lost_pieces_count > 0:
