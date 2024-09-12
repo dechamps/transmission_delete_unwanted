@@ -6,6 +6,7 @@ keywords = ["transmission", "torrent", "bittorrent"]
 classifiers = [
     "Environment :: Console",
     "License :: OSI Approved :: MIT License",
+    "Topic :: Communications :: File Sharing",
 ]
 dynamic = ["dependencies", "version"]
 requires-python = ">=3.9"
