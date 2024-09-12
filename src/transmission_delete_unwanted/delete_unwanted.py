@@ -237,10 +237,17 @@ class _TorrentProcessor:
             self._download_dir / f"{file_name}.transmission-delete-unwanted-tmp"
         )
         try:
-            with open(
-                original_file_path if original_file_path.exists() else part_file_path,
-                "rb",
-            ) as original_file, open(new_file_path, "wb") as new_file:
+            with (
+                open(
+                    (
+                        original_file_path
+                        if original_file_path.exists()
+                        else part_file_path
+                    ),
+                    "rb",
+                ) as original_file,
+                open(new_file_path, "wb") as new_file,
+            ):
                 if keep_first_bytes > 0:
                     file.copy(original_file, new_file, keep_first_bytes)
                 if keep_last_bytes > 0:
