@@ -62,3 +62,14 @@ jobs:
       - run: .venv/bin/pylint --verbose src transmission_delete_unwanted_tests
         env:
           PYTHONPATH: .
+  black:
+    runs-on: ubuntu-latest
+    needs: build-sdist
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+      - run: tar --gzip --extract --verbose --strip-components=1 --file transmission_delete_unwanted-*.tar.gz
+      - run: python -m venv .venv
+      - run: .venv/bin/pip install --requirement black-requirements.txt
+      - run: .venv/bin/black --diff --check .
