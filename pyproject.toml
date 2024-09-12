@@ -9,6 +9,10 @@ classifiers = [
 dynamic = ["dependencies", "version"]
 requires-python = ">=3.9"
 
+[project.urls]
+Homepage = "https://github.com/dechamps/transmission_delete_unwanted"
+Issues = "https://github.com/dechamps/transmission_delete_unwanted/issues"
+
 [build-system]
 requires = [
     "packaging==24.1",
