@@ -25,6 +25,8 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools_scm]
+
 [tool.setuptools.dynamic]
 # Use pinned dependencies for the package itself as the package is intended to be used
 # as an application in a dedicated venv. This ensures users end up running the package
