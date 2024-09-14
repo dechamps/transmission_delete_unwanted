@@ -2,6 +2,7 @@
 name = "transmission_delete_unwanted"
 authors = [{name = "Etienne Dechamps", email = "etienne@edechamps.fr"}]
 description = "Delete unwanted files in a Transmission torrent"
+readme = "README.md"
 keywords = ["transmission", "torrent", "bittorrent"]
 classifiers = [
     "Environment :: Console",
