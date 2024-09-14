@@ -16,6 +16,8 @@ jobs:
           path: dist/transmission_delete_unwanted-*.tar.gz
           if-no-files-found: error
   build-wheel:
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
     runs-on: ubuntu-latest
     needs: build-sdist
     steps:
@@ -28,6 +30,8 @@ jobs:
       - run: python -m venv .venv
       - run: .venv/bin/pip install build
       - run: .venv/bin/python -m build --wheel
+      - run: echo "hashes=$(sha256sum -- dist/transmission_delete_unwanted-*.whl | base64 --wrap=0)" >> "$GITHUB_OUTPUT"
+        id: hash
       - uses: actions/upload-artifact@v4
         with:
           name: wheel
@@ -113,3 +117,12 @@ jobs:
       - run: python -m venv .venv
       - run: .venv/bin/pip install --requirement black-requirements.txt
       - run: .venv/bin/black --diff --check .
+  provenance:
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    needs: [build-wheel]
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.build-wheel.outputs.hashes }}"
